@@ -75,6 +75,15 @@ module Eff =
 
     let ofAsync async = Asy async
 
+    let mapErr f ef =
+        match ef with
+        | Err e -> Err(f e)
+        | _ -> ef
+
+    let catch f ef =
+        match ef with
+        | Err e -> f e
+        | _ -> ef
 
     let rec map f ef =
         match ef with
@@ -243,3 +252,69 @@ module Eff =
 
     let runSync (env: 'env) (eff: Eff<'t, 'env>) : Result<'t, exn> =
         runTask env eff |> _.GetAwaiter().GetResult()
+
+[<AutoOpen>]
+module CE =
+    type EffBuilder() =
+        member _.Return(value: 't) : Eff<'t, 'env> = Eff.value value
+
+        member _.ReturnFrom(eff: Eff<'t, 'env>) : Eff<'t, 'env> = eff
+
+        member _.Bind(eff: Eff<'t, 'env>, f: 't -> Eff<'u, 'env>) : Eff<'u, 'env> = Eff.bind f eff
+
+        member _.Zero() : Eff<unit, 'env> = Eff.value ()
+
+        member _.Delay(f: unit -> Eff<'t, 'env>) : Eff<'t, 'env> = Eff.delay f
+
+        member _.Combine(left: Eff<unit, 'env>, right: Eff<'t, 'env>) : Eff<'t, 'env> = Eff.bind (fun () -> right) left
+
+        member _.TryWith(body: unit -> Eff<'t, 'env>, handler: exn -> Eff<'t, 'env>) : Eff<'t, 'env> =
+            Eff.delay body |> Eff.catch handler
+
+        member _.TryFinally(body: Eff<'t, 'env>, compensation: unit -> unit) : Eff<'t, 'env> =
+            Eff.ensuring (Eff.thunk compensation) body
+
+        member _.Using(resource: 'r, binder: 'r -> Eff<'t, 'env>) : Eff<'t, 'env> when 'r :> System.IDisposable =
+            Eff.bracket (Eff.value resource) (fun r -> Eff.thunk (fun () -> r.Dispose())) binder
+
+        member this.While(guard: unit -> bool, body: Eff<unit, 'env>) : Eff<unit, 'env> =
+            if not (guard ()) then
+                Eff.value ()
+            else
+                Eff.bind (fun () -> this.While(guard, body)) body
+
+        member _.For(sequence: seq<'t>, body: 't -> Eff<unit, 'env>) : Eff<unit, 'env> =
+            use enumerator = sequence.GetEnumerator()
+
+            let rec loop () =
+                if enumerator.MoveNext() then
+                    Eff.bind (fun () -> loop ()) (body enumerator.Current)
+                else
+                    Eff.value ()
+
+            loop ()
+
+        member _.Source(eff: Eff<'t, 'env>) : Eff<'t, 'env> = eff
+
+
+    [<AutoOpen>]
+    module CEExtLowPriority =
+        type EffBuilder with
+            member _.Source(task: Task<'t>) : Eff<'t, 'env> = Eff.ofTask (fun () -> task)
+
+            member _.Source(async: Async<'t>) : Eff<'t, 'env> = Eff.ofAsync (fun () -> async)
+
+    [<AutoOpen>]
+    module CEExtHighPriority =
+        type EffBuilder with
+            member _.Source(taskResult: Task<Result<'t, #exn>>) : Eff<'t, 'env> =
+                Eff.ofTask (fun () -> taskResult) |> Eff.bind Eff.ofResult
+
+            member _.Source(asyncResult: Async<Result<'t, #exn>>) : Eff<'t, 'env> =
+                Eff.ofAsync (fun () -> asyncResult) |> Eff.bind Eff.ofResult
+
+            member _.Source(result: Result<'t, #exn>) : Eff<'t, 'env> = Eff.ofResult result
+
+            member _.Source(option: Option<'t>) : Eff<'t, 'env> = Eff.ofOption option
+
+    let eff = EffBuilder()
