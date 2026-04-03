@@ -28,14 +28,17 @@ module CE =
                           let! f = async { return 6 }
                           let! g = task { return Ok 7 }
                           let! h = async { return Ok 8 }
+                          let! i = ValueSome 9
+                          let! j = ValueTask<int>(10)
+                          let! k = ValueTask<Result<int, exn>>(Ok 11)
 
-                          let result = a + b + c + d + e + f + g + h
+                          let result = a + b + c + d + e + f + g + h + i + j + k
 
                           return result
                       }
                       |> Eff.runTask ()
 
-                  Expect.equal value (Ok 36) "should be equal"
+                  Expect.equal value (Ok 66) "should be equal"
               }
 
               testTask "return! eff works" {
@@ -137,4 +140,19 @@ module CE =
 
                   Expect.equal value (Ok 1) "should return the body result"
                   Expect.isTrue probe.Disposed "use should dispose the resource"
+
+              }
+
+              testTask "use! disposes resources" {
+                  let probe = new DisposeProbe()
+
+                  let! value =
+                      eff {
+                          use! _probe = Eff.value probe
+                          return 1
+                      }
+                      |> Eff.runTask ()
+
+                  Expect.equal value (Ok 1) "should return the body result"
+                  Expect.isTrue probe.Disposed "use! should dispose the resource"
               } ]

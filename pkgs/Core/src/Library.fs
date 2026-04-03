@@ -262,6 +262,8 @@ module CE =
 
         member _.Bind(eff: Eff<'t, 'env>, f: 't -> Eff<'u, 'env>) : Eff<'u, 'env> = Eff.bind f eff
 
+        member _.BindReturn(eff: Eff<'t, 'env>, f: 't -> 'u) : Eff<'u, 'env> = Eff.map f eff
+
         member _.Zero() : Eff<unit, 'env> = Eff.value ()
 
         member _.Delay(f: unit -> Eff<'t, 'env>) : Eff<'t, 'env> = Eff.delay f
@@ -300,6 +302,8 @@ module CE =
     [<AutoOpen>]
     module CEExtLowPriority =
         type EffBuilder with
+            member _.Source(valueTask: ValueTask<'t>) : Eff<'t, 'env> = Eff.ofValueTask (fun () -> valueTask)
+
             member _.Source(task: Task<'t>) : Eff<'t, 'env> = Eff.ofTask (fun () -> task)
 
             member _.Source(async: Async<'t>) : Eff<'t, 'env> = Eff.ofAsync (fun () -> async)
@@ -307,6 +311,9 @@ module CE =
     [<AutoOpen>]
     module CEExtHighPriority =
         type EffBuilder with
+            member _.Source(valueTaskResult: ValueTask<Result<'t, exn>>) : Eff<'t, 'env> =
+                Eff.ofValueTask (fun () -> valueTaskResult) |> Eff.bind Eff.ofResult
+
             member _.Source(taskResult: Task<Result<'t, #exn>>) : Eff<'t, 'env> =
                 Eff.ofTask (fun () -> taskResult) |> Eff.bind Eff.ofResult
 
@@ -316,5 +323,7 @@ module CE =
             member _.Source(result: Result<'t, #exn>) : Eff<'t, 'env> = Eff.ofResult result
 
             member _.Source(option: Option<'t>) : Eff<'t, 'env> = Eff.ofOption option
+
+            member _.Source(valueOption: ValueOption<'t>) : Eff<'t, 'env> = Eff.ofValueOption valueOption
 
     let eff = EffBuilder()
