@@ -14,6 +14,30 @@ module CE =
         interface IDisposable with
             member _.Dispose() = disposed <- true
 
+    type DependencyA =
+        abstract SideEffectA: string -> unit
+
+    type DependencyB =
+        abstract SideEffectB: string -> unit
+
+    type Env() =
+        let arr = ResizeArray()
+
+        member _.Values() = arr.ToArray()
+
+        interface DependencyA with
+            member this.SideEffectA(arg1: string) : unit = arg1 |> sprintf "A: %s" |> arr.Add
+
+        interface DependencyB with
+            member this.SideEffectB(arg1: string) : unit = arg1 |> sprintf "B: %s" |> arr.Add
+
+
+    let depASideEffect str =
+        Eff.read (fun (env: #DependencyA) -> env.SideEffectA str)
+
+    let depBSideEffect str =
+        Eff.read (fun (env: #DependencyB) -> env.SideEffectB str)
+
     let tests =
         testList
             "CE"
@@ -155,4 +179,23 @@ module CE =
 
                   Expect.equal value (Ok 1) "should return the body result"
                   Expect.isTrue probe.Disposed "use! should dispose the resource"
-              } ]
+              }
+
+              testTask "dep injection" {
+                  let value () =
+                      eff {
+                          do! depASideEffect "yooo"
+                          do! depBSideEffect "wazzup"
+                      }
+
+                  let env = Env()
+
+                  let! result = value () |> Eff.runTask env
+
+                  Expect.equal (env.Values()) [| "A: yooo"; "B: wazzup" |] "side effects should have been executed"
+
+                  Expect.isTrue (Result.isOk result) "effect should have succeeded"
+                  ()
+              }
+
+              ]
