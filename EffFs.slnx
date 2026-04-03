@@ -4,4 +4,7 @@
   <Folder Name="/pkgs/Core/src/">
     <Project Path="pkgs/Core/src/Core.fsproj" />
   </Folder>
+  <Folder Name="/pkgs/Core/tests/">
+    <Project Path="pkgs/Core/tests/Core.Tests.fsproj" />
+  </Folder>
 </Solution>
