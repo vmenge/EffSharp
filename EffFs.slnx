@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/pkgs/" />
+  <Folder Name="/pkgs/Core/" />
+  <Folder Name="/pkgs/Core/src/">
+    <Project Path="pkgs/Core/src/Core.fsproj" />
+  </Folder>
+</Solution>

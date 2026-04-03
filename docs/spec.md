@@ -1,8 +1,8 @@
-# F# IO Effect Spec
+# F# Eff Effect Spec
 
 ## Goals
 
-Build an `IO` effect for F# with these priorities:
+Build an `Eff` effect for F# with these priorities:
 
 - good external developer ergonomics
 - strong performance
@@ -22,18 +22,25 @@ Primary shape:
 
 ```fsharp
 [<Struct>]
-type IO<'T, 'Env> =
-  | Pure of 'T
-  | Error of exn
-  | Pending of IONode<'T, 'Env>
+type Eff<'t, 'env> =
+  private
+  | Pure of value: 't
+  | Err of err: exn
+  | Delay of delay: (unit -> Eff<'t, 'env>)
+  | Thunk of thunk: (unit -> 't)
+  | Tsk of tsk: (unit -> Task<'t>)
+  | Asy of asy: (unit -> Async<'t>)
+  | Pending of pending: obj * step: Step<'t, 'env>
 ```
 
 Notes:
 
-- `IO` is a struct discriminated union.
+- `Eff` is a struct discriminated union.
 - `Pure` is the zero-cost success fast path.
-- `Error` stores `exn` directly.
-- `Pending` stores a private internal runtime node.
+- `Err` stores `exn` directly.
+- `Delay`, `Thunk`, `Tsk`, and `Asy` are direct lazy runtime cases.
+- `Pending` stores erased composed runtime state plus a private step delegate.
+- the union is private; construction is intended to go through the `Eff` module
 - No extra public branch for “early exit”.
 
 ### Why `exn`
@@ -57,14 +64,14 @@ Chosen over a custom internal error union because:
 All failures normalize to:
 
 ```fsharp
-Error of exn
+Err of exn
 ```
 
 Examples:
 
-- thrown exception -> `Error ex`
-- faulted `Task` -> `Error ex`
-- faulted `Async` -> `Error ex`
+- thrown exception -> `Err ex`
+- faulted `Task` -> `Err ex`
+- faulted `Async` -> `Err ex`
 - `Result.Error e` -> mapped to an exception
 - `None` -> mapped to an exception
 
@@ -76,7 +83,7 @@ If an error source is not originally an exception, such as `Option.None` or `Res
 
 ### CE exception behavior
 
-The `io {}` computation expression should automatically catch exceptions thrown inside user callbacks and normalize them into `Error exn`.
+The `eff {}` computation expression should automatically catch exceptions thrown inside user callbacks and normalize them into `Err exn`.
 
 This applies to:
 
@@ -93,21 +100,27 @@ Exceptions should not leak through the effect abstraction by default.
 
 ## Laziness
 
-Effects should be lazy by default.
+Effects should be lazy at effect boundaries by default.
 
 Meaning:
 
-- constructing an `IO` value should not start work
+- constructing an `Eff` value should not start work
 - running happens only via `run*` functions
 - interop constructors from eager worlds should take thunks
+- `Pure` and `Err` remain strict terminal values
+- laziness should primarily live in suspended/effectful constructors and pending state
 
 Preferred constructor shapes:
 
 ```fsharp
-IO.sync      : (unit -> 'T) -> IO<'T, 'Env>
-IO.delay     : (unit -> IO<'T, 'Env>) -> IO<'T, 'Env>
-IO.fromTask  : (unit -> Task<'T>) -> IO<'T, 'Env>
-IO.fromAsync : (unit -> Async<'T>) -> IO<'T, 'Env>
+Eff.value     : 'T -> Eff<'T, 'Env>
+Eff.err       : exn -> Eff<'T, 'Env>
+Eff.errwith   : string -> Eff<'T, 'Env>
+Eff.thunk     : (unit -> 'T) -> Eff<'T, 'Env>
+Eff.delay     : (unit -> Eff<'T, 'Env>) -> Eff<'T, 'Env>
+Eff.ofTask    : (unit -> Task<'T>) -> Eff<'T, 'Env>
+Eff.ofValueTask : (unit -> ValueTask<'T>) -> Eff<'T, 'Env>
+Eff.ofAsync   : (unit -> Async<'T>) -> Eff<'T, 'Env>
 ```
 
 Benefits:
@@ -122,56 +135,59 @@ Performance note:
 
 - laziness is not automatically faster
 - main cost comes from closures/thunks and extra nodes
-- `Pure` and `Error` should remain strict and cheap
+- `Pure` and `Err` should remain strict and cheap
 
 ---
 
-## Pending Representation
+## Runtime Representation
 
-`Pending` holds a private `IONode<'T, 'Env>` directly.
-
-No extra `IOPending` wrapper is required.
+The current implementation uses specialized direct DU cases for common suspended forms and reserves `Pending` for composed/internal runtime state.
 
 ```fsharp
 [<Struct>]
-type IO<'T, 'Env> =
-  | Pure of 'T
-  | Error of exn
-  | Pending of IONode<'T, 'Env>
+type Eff<'t, 'env> =
+  private
+  | Pure of value: 't
+  | Err of err: exn
+  | Delay of delay: (unit -> Eff<'t, 'env>)
+  | Thunk of thunk: (unit -> 't)
+  | Tsk of tsk: (unit -> Task<'t>)
+  | Asy of asy: (unit -> Async<'t>)
+  | Pending of pending: obj * step: Step<'t, 'env>
 ```
 
-### `IONode`
+### `Step`
 
-`IONode<'T, 'Env>` is private and stable.
+`Step<'T, 'Env>` is a private delegate used to advance composed pending state.
 
 Conceptual shape:
 
 ```fsharp
-type IONode<'T, 'Env> =
-    abstract Step : 'Env -> ValueTask<IO<'T, 'Env>>
+type Step<'T, 'Env> =
+    delegate of obj * 'Env -> ValueTask<Eff<'T, 'Env>>
 ```
 
 This is the preferred mental model:
 
-- `Pure` and `Error` are terminal
-- `Pending node` means the runtime should ask the node for the next step
-- the node may represent delayed sync work, task/async interop, bind chains, etc.
+- `Pure` and `Err` are terminal
+- `Delay`, `Thunk`, `Tsk`, and `Asy` are direct lazy leaf cases
+- `Pending (state, step)` means the runtime should ask `step` to advance `state`
+- `Pending` is intended for composed operations such as `map`, `bind`, `catch`, and `finally`
 
-### Why `IONode` is a reference type
+### Why not make everything `Pending`
 
-Preferred because pending computations typically require:
+Using dedicated DU cases for common suspended forms avoids paying an extra wrapper allocation for every pending computation.
 
-- stable identity
-- mutable shared runtime state
-- continuation storage
-- recursive/composed structure
-- async interop with heap-backed mechanisms
+This is especially important for:
 
-A struct `IONode` is possible in theory, but not preferred as the core suspended runtime state.
+- delayed sync work
+- task interop
+- async interop
+- other simple lazy leaf effects
 
----
+`Pending` still exists for the cases that genuinely need erased composed state.
 
-## Why not `Pending of ValueTask<IO<'T, 'Env>>`
+## Why not `Pending of ValueTask<Eff<'T, 'Env>>`
 
 Rejected as the primary public representation.
 
@@ -179,40 +195,40 @@ Example rejected shape:
 
 ```fsharp
 [<Struct>]
-type IO<'T, 'Env> =
+type Eff<'T, 'Env> =
   | Pure of 'T
-  | Error of exn
-  | Pending of ValueTask<IO<'T, 'Env>>
+  | Err of exn
+  | Pending of ValueTask<Eff<'T, 'Env>>
 ```
 
 Reasons:
 
 - `ValueTask` has one-shot/sensitive consumption semantics
 - storing it directly in a copyable struct union is fragile
-- copying `IO` copies the `ValueTask`
-- makes the public `IO` type fatter than desired
+- copying `Eff` copies the `ValueTask`
+- makes the public `Eff` type fatter than desired
 - couples public representation too tightly to a low-level async primitive
 
-`ValueTask` may still be used internally inside `IONode`.
+`ValueTask` may still be used internally inside the runtime, but the current implementation normalizes `ofValueTask` into the `Tsk` path.
 
 ---
 
-## Running IO
+## Running Eff
 
 ### Public runners
 
 On .NET:
 
 ```fsharp
-IO.runSync  : 'Env -> IO<'T, 'Env> -> Result<'T, exn>
-IO.runTask  : 'Env -> IO<'T, 'Env> -> Task<Result<'T, exn>>
-IO.runAsync : 'Env -> IO<'T, 'Env> -> Async<Result<'T, exn>>
+Eff.runSync  : 'Env -> Eff<'T, 'Env> -> Result<'T, exn>
+Eff.runTask  : 'Env -> Eff<'T, 'Env> -> Task<Result<'T, exn>>
+Eff.runAsync : 'Env -> Eff<'T, 'Env> -> Async<Result<'T, exn>>
 ```
 
 On Fable:
 
 ```fsharp
-IO.runPromise : 'Env -> IO<'T, 'Env> -> JS.Promise<Result<'T, exn>>
+Eff.runPromise : 'Env -> Eff<'T, 'Env> -> JS.Promise<Result<'T, exn>>
 ```
 
 ### `runSync`
@@ -242,7 +258,7 @@ Environment support is desired and should be composable.
 Chosen shape:
 
 ```fsharp
-type IO<'T, 'Env>
+type Eff<'T, 'Env>
 ```
 
 ### Why `'T` first and `'Env` second
@@ -254,13 +270,13 @@ Inference usually leaves `'Env` generic if unconstrained.
 Example:
 
 ```fsharp
-IO.pure 123
+Eff.value 123
 ```
 
 should infer something equivalent to:
 
 ```fsharp
-IO<int, 'Env>
+Eff<int, 'Env>
 ```
 
 not force `unit`.
@@ -272,11 +288,8 @@ F# does not provide the desired default generic argument behavior here, so alias
 Possible alias pattern:
 
 ```fsharp
-type Eff<'T, 'Env> = IO<'T, 'Env>
-type IO0<'T> = IO<'T, unit>
+type Eff0<'T> = Eff<'T, unit>
 ```
-
-Naming remains open.
 
 ---
 
@@ -301,9 +314,9 @@ type IHasDb =
 Then functions depend only on what they need:
 
 ```fsharp
-val logInfo  : string -> IO<unit, 'Env> when 'Env :> IHasLogger
-val getUser  : int -> IO<User, 'Env> when 'Env :> IHasDb
-val greetUser : int -> IO<string, 'Env> when 'Env :> IHasLogger and 'Env :> IHasDb
+val logInfo  : string -> Eff<unit, 'Env> when 'Env :> IHasLogger
+val getUser  : int -> Eff<User, 'Env> when 'Env :> IHasDb
+val greetUser : int -> Eff<string, 'Env> when 'Env :> IHasLogger and 'Env :> IHasDb
 ```
 
 Concrete env values implement multiple interfaces.
@@ -335,23 +348,24 @@ Capability interfaces are preferred over small-record adapters for primary ergon
 
 ## Computation Expression Semantics
 
-The CE should support `let!` over multiple source types by converting them into `IO`.
+The CE should support `let!` over multiple source types by converting them into `Eff`.
 
 Supported conceptual sources:
 
-- `IO<'T, 'Env>`
+- `Eff<'T, 'Env>`
 - `Result<'T, 'E>`
 - `Option<'T>`
 - `Task<'T>`
+- `ValueTask<'T>`
 - `Async<'T>`
 - Promise under Fable
 
-This can be implemented with `Source` overloads or overloaded `Bind`, with a preference for normalizing sources into `IO` first.
+This can be implemented with `Source` overloads or overloaded `Bind`, with a preference for normalizing sources into `Eff` first.
 
 Example target usage:
 
 ```fsharp
-io {
+eff {
   let! x = someIo
   let! y = someResult
   let! z = someOption
@@ -364,9 +378,11 @@ io {
 
 Preferred strategy:
 
-- `Result` -> immediate `Pure` / `Error`
-- `Option` -> immediate `Pure` / `Error`
-- `Task` / `Async` / Promise -> lazy normalized pending node
+- `Result` -> immediate `Pure` / `Err`
+- `Option` -> immediate `Pure` / `Err`
+- `Task` -> lazy `Tsk`
+- `Async` -> lazy `Asy`
+- `ValueTask` -> currently normalized into the `Tsk` path
 - no storing of `Result` or `Option` inside `Pending`
 
 ---
@@ -377,7 +393,7 @@ No extra public union case should be added for early exit.
 
 Rejected idea:
 
-- adding a dedicated `Exit` branch to `IO`
+- adding a dedicated `Exit` branch to `Eff`
 
 Preferred direction:
 
@@ -386,21 +402,21 @@ Preferred direction:
 The most practical API shape is value-preserving helpers such as:
 
 ```fsharp
-IO.ensure : ('T -> bool) -> IO<'T, 'Env> -> IO<'T, 'Env>
+Eff.ensure : ('T -> bool) -> Eff<'T, 'Env> -> Eff<'T, 'Env>
 ```
 
 Example:
 
 ```fsharp
 loadUser id
-|> IO.ensure isActive
+|> Eff.ensure isActive
 ```
 
 Inside CE:
 
 ```fsharp
-io {
-  let! user = loadUser id |> IO.ensure isActive
+eff {
+  let! user = loadUser id |> Eff.ensure isActive
   return user
 }
 ```
@@ -418,11 +434,11 @@ Defer-style cleanup is desired, similar in spirit to Go/Odin `defer`.
 Desired capabilities:
 
 ```fsharp
-IO.defer      : (unit -> unit) -> IO<unit, 'Env>
-IO.deferIO    : (unit -> IO<unit, 'Env>) -> IO<unit, 'Env>
-IO.finallyDo  : (unit -> unit) -> IO<'T, 'Env> -> IO<'T, 'Env>
-IO.finallyIO  : (unit -> IO<unit, 'Env>) -> IO<'T, 'Env> -> IO<'T, 'Env>
-IO.bracket    : IO<'R, 'Env> -> ('R -> IO<unit, 'Env>) -> ('R -> IO<'T, 'Env>) -> IO<'T, 'Env>
+Eff.defer      : (unit -> unit) -> Eff<unit, 'Env>
+Eff.deferIO    : (unit -> Eff<unit, 'Env>) -> Eff<unit, 'Env>
+Eff.finallyDo  : (unit -> unit) -> Eff<'T, 'Env> -> Eff<'T, 'Env>
+Eff.finallyIO  : (unit -> Eff<unit, 'Env>) -> Eff<'T, 'Env> -> Eff<'T, 'Env>
+Eff.bracket    : Eff<'R, 'Env> -> ('R -> Eff<unit, 'Env>) -> ('R -> Eff<'T, 'Env>) -> Eff<'T, 'Env>
 ```
 
 Semantics:
@@ -439,22 +455,24 @@ Semantics:
 ### Core constructors
 
 ```fsharp
-IO.pure      : 'T -> IO<'T, 'Env>
-IO.error     : exn -> IO<'T, 'Env>
-IO.sync      : (unit -> 'T) -> IO<'T, 'Env>
-IO.delay     : (unit -> IO<'T, 'Env>) -> IO<'T, 'Env>
-IO.fromTask  : (unit -> Task<'T>) -> IO<'T, 'Env>
-IO.fromAsync : (unit -> Async<'T>) -> IO<'T, 'Env>
+Eff.value     : 'T -> Eff<'T, 'Env>
+Eff.err       : exn -> Eff<'T, 'Env>
+Eff.errwith   : string -> Eff<'T, 'Env>
+Eff.thunk     : (unit -> 'T) -> Eff<'T, 'Env>
+Eff.delay     : (unit -> Eff<'T, 'Env>) -> Eff<'T, 'Env>
+Eff.ofTask    : (unit -> Task<'T>) -> Eff<'T, 'Env>
+Eff.ofValueTask : (unit -> ValueTask<'T>) -> Eff<'T, 'Env>
+Eff.ofAsync   : (unit -> Async<'T>) -> Eff<'T, 'Env>
 ```
 
 ### Core combinators
 
 ```fsharp
-IO.map       : ('T -> 'U) -> IO<'T, 'Env> -> IO<'U, 'Env>
-IO.bind      : ('T -> IO<'U, 'Env>) -> IO<'T, 'Env> -> IO<'U, 'Env>
-IO.catch     : (exn -> IO<'T, 'Env>) -> IO<'T, 'Env> -> IO<'T, 'Env>
-IO.mapError  : (exn -> exn) -> IO<'T, 'Env> -> IO<'T, 'Env>
-IO.ensure    : ('T -> bool) -> IO<'T, 'Env> -> IO<'T, 'Env>
+Eff.map       : Eff<'T, 'Env> -> ('T -> 'U) -> Eff<'U, 'Env>
+Eff.bind      : Eff<'T, 'Env> -> ('T -> Eff<'U, 'Env>) -> Eff<'U, 'Env>
+Eff.catch     : Eff<'T, 'Env> -> (exn -> Eff<'T, 'Env>) -> Eff<'T, 'Env>
+Eff.mapError  : Eff<'T, 'Env> -> (exn -> exn) -> Eff<'T, 'Env>
+Eff.ensure    : Eff<'T, 'Env> -> ('T -> bool) -> Eff<'T, 'Env>
 ```
 
 ### Environment helpers
@@ -462,10 +480,10 @@ IO.ensure    : ('T -> bool) -> IO<'T, 'Env> -> IO<'T, 'Env>
 Exact names remain open, but conceptually:
 
 ```fsharp
-IO.ask       : IO<'Env, 'Env>
-IO.service   : IO<'Service, 'Env> when 'Env :> IHasServiceLike
-IO.provide   : 'Env -> IO<'T, 'Env> -> IO<'T, unit>   // or direct runner-oriented variant
-IO.local     : ('OuterEnv -> 'InnerEnv) -> IO<'T, 'InnerEnv> -> IO<'T, 'OuterEnv>
+Eff.ask       : Eff<'Env, 'Env>
+Eff.service   : Eff<'Service, 'Env> when 'Env :> IHasServiceLike
+Eff.provide   : 'Env -> Eff<'T, 'Env> -> Eff<'T, unit>   // or direct runner-oriented variant
+Eff.local     : ('OuterEnv -> 'InnerEnv) -> Eff<'T, 'InnerEnv> -> Eff<'T, 'OuterEnv>
 ```
 
 ---
@@ -475,26 +493,35 @@ IO.local     : ('OuterEnv -> 'InnerEnv) -> IO<'T, 'InnerEnv> -> IO<'T, 'OuterEnv
 Primary performance principles:
 
 - `Pure` path must be as cheap as possible
-- `Error` path must stay simple
-- pending path should allocate only when genuinely suspended/effectful
+- `Err` path must stay simple
+- direct lazy leaf cases should avoid extra wrapper allocations
+- `Pending` should allocate only when composition genuinely needs erased state
 - avoid large internal error unions
 - prefer normalization of source types early
 - do not expose `ValueTask` directly as the public pending representation
 - avoid unnecessary closures/thunks in hot paths
 - laziness should exist at the effect boundary, not as pointless overhead everywhere
 
+### Hot-path guidance
+
+`Eff` is intended for orchestration and effect boundaries, not for tight inner loops.
+
+- keep simulation, numeric, and per-frame hot-path logic as plain F# functions
+- embed those pure functions inside an upstream `Eff` workflow
+- avoid building heap-backed pending chains in performance-critical inner loops
+
 ### Main expected costs
 
 The likely hotspots are:
 
 - closure allocation
-- node allocation for pending work
+- boxed state for composed `Pending` work
 - task/async/promise interop
 - async state machine churn
-- virtual dispatch in runtime nodes
+- delegate invocation in pending steps
 - large/copy-heavy value types
 
-Branching on `Pure | Error | Pending` is acceptable and part of the chosen design.
+Branching on the specialized DU cases is acceptable and part of the chosen design.
 
 ---
 
@@ -502,21 +529,13 @@ Branching on `Pure | Error | Pending` is acceptable and part of the chosen desig
 
 These were left intentionally open or only partially decided:
 
-1. Exact internal encoding of `IONode`
-   - interface with implementations
-   - sealed node type with tags
-   - other optimized runtime representation
-
-2. Exact internal encoding of short-circuit behavior for `ensure`/guard-like helpers
+1. Exact internal encoding of short-circuit behavior for `ensure`/guard-like helpers
    - public API direction is chosen
    - internal control mechanism remains open
 
-3. Final public naming
-   - `IO<'T, 'Env>` vs a two-type naming split such as `EnvIO<'T, 'Env>` + alias
+2. Exact promise interop API on Fable
 
-4. Exact promise interop API on Fable
-
-5. Whether to expose both `runTask` and `runValueTask`
+3. Whether to expose both `runTask` and `runValueTask`
    - `runTask` is clearly desired
    - `runValueTask` remains optional/advanced
 
@@ -526,17 +545,19 @@ These were left intentionally open or only partially decided:
 
 Chosen:
 
-- `IO<'T, 'Env>`
+- `Eff<'T, 'Env>`
+- private struct DU
 - struct DU
-- `Pure | Error of exn | Pending of IONode`
+- direct DU cases for `Delay`, `Thunk`, `Tsk`, and `Asy`
+- `Pending of obj * Step` for composed runtime state
 - errors represented as `exn`
 - effects lazy by default
-- `Task`/`Async`/Promise constructors should take thunks
+- laziness should live at effect boundaries, while terminal cases stay strict
+- `Task`/`Async` constructors should take thunks
+- `ValueTask` is accepted at the API boundary and currently normalized into the task path
 - no extra public `Exit` branch
-- no need for `IOPending` wrapper
-- `IONode` private and reference-based
 - DI via small capability interfaces is preferred
-- multiple source types can participate in `let!` by normalization into `IO`
+- multiple source types can participate in `let!` by normalization into `Eff`
 - `runSync` is valid at top-level boundaries
 - defer/finally/bracket-style cleanup should exist
 
@@ -544,5 +565,5 @@ Rejected:
 
 - large internal error union as the primary model
 - giant monolithic env as the only DI story
-- public `Pending of ValueTask<IO<...>>`
+- public `Pending of ValueTask<Eff<...>>`
 - extra public DU branch just for early exit
