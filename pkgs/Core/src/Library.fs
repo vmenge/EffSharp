@@ -104,8 +104,7 @@ module Eff =
             return x
         })
 
-    let ofAsync async =
-        Eff.Task(fun () -> async () |> Async.StartAsTask)
+    let ofAsync async = Eff.Task(fun () -> async () |> Async.StartAsTask)
 
     let mapErr f ef =
         match ef with
