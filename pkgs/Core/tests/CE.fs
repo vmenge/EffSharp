@@ -26,10 +26,12 @@ module CE =
         member _.Values() = arr.ToArray()
 
         interface DependencyA with
-            member this.SideEffectA(arg1: string) : unit = arg1 |> sprintf "A: %s" |> arr.Add
+            member this.SideEffectA(arg1: string) : unit =
+                arg1 |> sprintf "A: %s" |> arr.Add
 
         interface DependencyB with
-            member this.SideEffectB(arg1: string) : unit = arg1 |> sprintf "B: %s" |> arr.Add
+            member this.SideEffectB(arg1: string) : unit =
+                arg1 |> sprintf "B: %s" |> arr.Add
 
 
     let depASideEffect str =
@@ -39,255 +41,288 @@ module CE =
         Eff.read (fun (env: #DependencyB) -> env.SideEffectB str)
 
     let tests =
-        testList
-            "CE"
-            [ testTask "ce sources works" {
-                  let! value =
-                      eff {
-                          let a = 1
-                          let! b = Eff.value 2
-                          let! c = Ok 3
-                          let! d = Some 4
-                          let! e = task { return 5 }
-                          let! f = async { return 6 }
-                          let! g = task { return Ok 7 }
-                          let! h = async { return Ok 8 }
-                          let! i = ValueSome 9
-                          let! j = ValueTask<int>(10)
-                          let! k = ValueTask<Result<int, exn>>(Ok 11)
+        testList "CE" [
+            testTask "ce sources works" {
+                let! value =
+                    eff {
+                        let a = 1
+                        let! b = Eff.value 2
+                        let! c = Ok 3
+                        let! d = Some 4
+                        let! e = task { return 5 }
+                        let! f = async { return 6 }
+                        let! g = task { return Ok 7 }
+                        let! h = async { return Ok 8 }
+                        let! i = ValueSome 9
+                        let! j = ValueTask<int>(10)
+                        let! k = ValueTask<Result<int, exn>>(Ok 11)
 
-                          let result = a + b + c + d + e + f + g + h + i + j + k
+                        let result = a + b + c + d + e + f + g + h + i + j + k
 
-                          return result
-                      }
-                      |> Eff.runTask ()
+                        return result
+                    }
+                    |> Eff.runTask ()
 
-                  Expect.equal value (Ok 66) "should be equal"
-              }
+                Expect.equal value (Exit.Ok 66) "should be equal"
+            }
 
-              testTask "return! eff works" {
-                  let! value = eff { return! Eff.value 5 } |> Eff.runTask ()
+            testTask "return! eff works" {
+                let! value = eff { return! Eff.value 5 } |> Eff.runTask ()
 
-                  Expect.equal value (Ok 5) "should return from Eff directly"
-              }
+                Expect.equal value (Exit.Ok 5) "should return from Eff directly"
+            }
 
-              testTask "result error short-circuits" {
-                  let mutable ran = false
+            testTask "result error short-circuits" {
+                let mutable ran = false
 
-                  let! value =
-                      eff {
-                          let! _ = Ok 1
-                          let! _ = Error(exn "boom")
-                          ran <- true
-                          return 1
-                      }
-                      |> Eff.runTask ()
+                let! value =
+                    eff {
+                        let! _ = Ok 1
+                        let! _ = Error "boom"
+                        ran <- true
+                        return 1
+                    }
+                    |> Eff.runTask ()
 
-                  let err: exn = Result.error value
-                  Expect.equal err.Message "boom" "should return the result error"
-                  Expect.isFalse ran "later CE code should not run"
-              }
+                Expect.equal
+                    value
+                    (Exit.Err "boom")
+                    "should return the result error"
 
-              testTask "option none short-circuits" {
-                  let mutable ran = false
+                Expect.isFalse ran "later CE code should not run"
+            }
 
-                  let! value =
-                      eff {
-                          let! _ = Some 1
-                          let! _ = None
-                          ran <- true
-                          return 1
-                      }
-                      |> Eff.runTask ()
+            testTask "option none short-circuits" {
+                let mutable ran = false
 
-                  let err: exn = Result.error value
-                  Expect.equal (err.GetType()) typeof<ValueIsNone> "should return ValueIsNone"
-                  Expect.isFalse ran "later CE code should not run"
-              }
+                let! value =
+                    eff {
+                        let! _ = Some 1
+                        let! _ = None
+                        ran <- true
+                        return 1
+                    }
+                    |> Eff.runTask ()
 
-              testTask "task result error short-circuits" {
-                  let mutable ran = false
-                  let taskResult () : Task<Result<int, exn>> = task { return Error(exn "boom") }
+                let err: exn = Exit.err value
 
-                  let! value =
-                      eff {
-                          let! _ = taskResult ()
-                          ran <- true
-                          return 1
-                      }
-                      |> Eff.runTask ()
+                Expect.equal
+                    (err.GetType())
+                    typeof<ValueIsNone>
+                    "should return ValueIsNone"
 
-                  let err: exn = Result.error value
-                  Expect.equal err.Message "boom" "should return the task result error"
-                  Expect.isFalse ran "later CE code should not run"
-              }
+                Expect.isFalse ran "later CE code should not run"
+            }
 
-              testTask "exception thrown inside CE is caught" {
-                  let! value =
-                      eff {
-                          let _ = failwith "boom"
-                          return 1
-                      }
-                      |> Eff.runTask ()
+            testTask "task result error short-circuits" {
+                let mutable ran = false
 
-                  let err: exn = Result.error value
-                  Expect.equal err.Message "boom" "should catch thrown exceptions"
-              }
+                let taskResult () : Task<Result<int, string>> = task {
+                    return Error "boom"
+                }
 
-              testTask "try finally runs on failure" {
-                  let mutable cleaned = false
+                let! value =
+                    eff {
+                        let! _ = taskResult ()
+                        ran <- true
+                        return 1
+                    }
+                    |> Eff.runTask ()
 
-                  let! value =
-                      eff {
-                          try
-                              let! _ = Eff.errwith "boom"
-                              return 1
-                          finally
-                              cleaned <- true
-                      }
-                      |> Eff.runTask ()
+                Expect.equal
+                    value
+                    (Exit.Err "boom")
+                    "should return the task result error"
 
-                  let err: exn = Result.error value
-                  Expect.equal err.Message "boom" "should preserve the body error"
-                  Expect.isTrue cleaned "finally should run"
-              }
+                Expect.isFalse ran "later CE code should not run"
+            }
 
-              testTask "use disposes resources" {
-                  let probe = new DisposeProbe()
+            testTask "exception thrown inside CE is caught" {
+                let! value =
+                    eff {
+                        let _ = failwith "boom"
+                        return 1
+                    }
+                    |> Eff.runTask ()
 
-                  let! value =
-                      eff {
-                          use _probe = probe
-                          return 1
-                      }
-                      |> Eff.runTask ()
+                let err: exn = Exit.ex value
+                Expect.equal err.Message "boom" "should catch thrown exceptions"
+            }
 
-                  Expect.equal value (Ok 1) "should return the body result"
-                  Expect.isTrue probe.Disposed "use should dispose the resource"
+            testTask "try finally runs on failure" {
+                let mutable cleaned = false
 
-              }
+                let! value =
+                    eff {
+                        try
+                            let _ = failwith "boom"
+                            return 1
+                        finally
+                            cleaned <- true
+                    }
+                    |> Eff.runTask ()
 
-              testTask "use! disposes resources" {
-                  let probe = new DisposeProbe()
+                let err: exn = Exit.ex value
 
-                  let! value =
-                      eff {
-                          use! _probe = Eff.value probe
-                          return 1
-                      }
-                      |> Eff.runTask ()
+                Expect.equal
+                    err.Message
+                    "boom"
+                    "should preserve the body defect"
 
-                  Expect.equal value (Ok 1) "should return the body result"
-                  Expect.isTrue probe.Disposed "use! should dispose the resource"
-              }
+                Expect.isTrue cleaned "finally should run"
+            }
 
-              testTask "defer runs on success" {
-                  let mutable cleaned = false
+            testTask "use disposes resources" {
+                let probe = new DisposeProbe()
 
-                  let! value =
-                      eff {
-                          defer (Eff.thunk (fun () -> cleaned <- true))
-                          return 1
-                      }
-                      |> Eff.runTask ()
+                let! value =
+                    eff {
+                        use _probe = probe
+                        return 1
+                    }
+                    |> Eff.runTask ()
 
-                  Expect.equal value (Ok 1) "should return the body result"
-                  Expect.isTrue cleaned "defer should run on success"
-              }
+                Expect.equal value (Exit.Ok 1) "should return the body result"
+                Expect.isTrue probe.Disposed "use should dispose the resource"
 
-              testTask "defer runs on failure" {
-                  let mutable cleaned = false
+            }
 
-                  let! value =
-                      eff {
-                          defer (Eff.thunk (fun () -> cleaned <- true))
-                          return! Eff.errwith "boom"
-                      }
-                      |> Eff.runTask ()
+            testTask "use! disposes resources" {
+                let probe = new DisposeProbe()
 
-                  let err: exn = Result.error value
-                  Expect.equal err.Message "boom" "should preserve the body error"
-                  Expect.isTrue cleaned "defer should run on failure"
-              }
+                let! value =
+                    eff {
+                        use! _probe = Eff.value probe
+                        return 1
+                    }
+                    |> Eff.runTask ()
 
-              testTask "defer runs in LIFO order" {
-                  let events = ResizeArray<string>()
+                Expect.equal value (Exit.Ok 1) "should return the body result"
+                Expect.isTrue probe.Disposed "use! should dispose the resource"
+            }
 
-                  let! value =
-                      eff {
-                          defer (Eff.thunk (fun () -> events.Add "outer"))
-                          defer (Eff.thunk (fun () -> events.Add "inner"))
-                          return 1
-                      }
-                      |> Eff.runTask ()
+            testTask "defer runs on success" {
+                let mutable cleaned = false
 
-                  Expect.equal value (Ok 1) "should return the body result"
-                  Expect.sequenceEqual events [ "inner"; "outer" ] "defer should run in LIFO order"
-              }
+                let! value =
+                    eff {
+                        defer (Eff.thunk (fun () -> cleaned <- true))
+                        return 1
+                    }
+                    |> Eff.runTask ()
 
-              testTask "defer captures prior locals" {
-                  let mutable seen = 0
+                Expect.equal value (Exit.Ok 1) "should return the body result"
+                Expect.isTrue cleaned "defer should run on success"
+            }
 
-                  let! value =
-                      eff {
-                          let x = 41
-                          defer (fun () -> seen <- x)
-                          let! y = Eff.value 1
-                          return x + y
-                      }
-                      |> Eff.runTask ()
+            testTask "defer runs on failure" {
+                let mutable cleaned = false
 
-                  Expect.equal value (Ok 42) "should return the body result"
-                  Expect.equal seen 41 "defer should capture the local value"
-              }
+                let! value =
+                    eff {
+                        defer (Eff.thunk (fun () -> cleaned <- true))
+                        return! Eff.err "boom"
+                    }
+                    |> Eff.runTask ()
 
-              testTask "defer after let! can use bound value" {
-                  let mutable seen = 0
+                Expect.equal
+                    value
+                    (Exit.Err "boom")
+                    "should preserve the body error"
 
-                  let! value =
-                      eff {
-                          let! x = Eff.value 41
-                          defer (Eff.thunk (fun () -> seen <- seen + x))
-                          defer (fun () -> seen <- seen + x)
-                          return x + 1
-                      }
-                      |> Eff.runTask ()
+                Expect.isTrue cleaned "defer should run on failure"
+            }
 
-                  Expect.equal value (Ok 42) "should return the body result"
-                  Expect.equal seen 82 "defer should capture the bound value"
-              }
+            testTask "defer runs in LIFO order" {
+                let events = ResizeArray<string>()
 
-              testTask "multiple defers still run on failure" {
-                  let events = ResizeArray<string>()
+                let! value =
+                    eff {
+                        defer (Eff.thunk (fun () -> events.Add "outer"))
+                        defer (Eff.thunk (fun () -> events.Add "inner"))
+                        return 1
+                    }
+                    |> Eff.runTask ()
 
-                  let! value =
-                      eff {
-                          defer (Eff.thunk (fun () -> events.Add "outer"))
-                          defer (Eff.thunk (fun () -> events.Add "inner"))
-                          return! Eff.errwith "boom"
-                      }
-                      |> Eff.runTask ()
+                Expect.equal value (Exit.Ok 1) "should return the body result"
 
-                  let err: exn = Result.error value
-                  Expect.equal err.Message "boom" "should preserve the body error"
-                  Expect.sequenceEqual events [ "inner"; "outer" ] "all defers should run in LIFO order"
-              }
+                Expect.sequenceEqual
+                    events
+                    [ "inner"; "outer" ]
+                    "defer should run in LIFO order"
+            }
 
-              testTask "dep injection" {
-                  let value () =
-                      eff {
-                          do! depASideEffect "yooo"
-                          do! depBSideEffect "wazzup"
-                      }
+            testTask "defer captures prior locals" {
+                let mutable seen = 0
 
-                  let env = Env()
+                let! value =
+                    eff {
+                        let x = 41
+                        defer (fun () -> seen <- x)
+                        let! y = Eff.value 1
+                        return x + y
+                    }
+                    |> Eff.runTask ()
 
-                  let! result = value () |> Eff.runTask env
+                Expect.equal value (Exit.Ok 42) "should return the body result"
+                Expect.equal seen 41 "defer should capture the local value"
+            }
 
-                  Expect.equal (env.Values()) [| "A: yooo"; "B: wazzup" |] "side effects should have been executed"
+            testTask "defer after let! can use bound value" {
+                let mutable seen = 0
 
-                  Expect.isTrue (Result.isOk result) "effect should have succeeded"
-                  ()
-              }
+                let! value =
+                    eff {
+                        let! x = Eff.value 41
+                        defer (Eff.thunk (fun () -> seen <- seen + x))
+                        defer (fun () -> seen <- seen + x)
+                        return x + 1
+                    }
+                    |> Eff.runTask ()
 
-              ]
+                Expect.equal value (Exit.Ok 42) "should return the body result"
+                Expect.equal seen 82 "defer should capture the bound value"
+            }
+
+            testTask "multiple defers still run on failure" {
+                let events = ResizeArray<string>()
+
+                let! value =
+                    eff {
+                        defer (Eff.thunk (fun () -> events.Add "outer"))
+                        defer (Eff.thunk (fun () -> events.Add "inner"))
+                        return! Eff.err "boom"
+                    }
+                    |> Eff.runTask ()
+
+                Expect.equal
+                    value
+                    (Exit.Err "boom")
+                    "should preserve the body error"
+
+                Expect.sequenceEqual
+                    events
+                    [ "inner"; "outer" ]
+                    "all defers should run in LIFO order"
+            }
+
+            testTask "dep injection" {
+                let value () = eff {
+                    do! depASideEffect "yooo"
+                    do! depBSideEffect "wazzup"
+                }
+
+                let env = Env()
+
+                let! result = value () |> Eff.runTask env
+
+                Expect.equal
+                    (env.Values())
+                    [| "A: yooo"; "B: wazzup" |]
+                    "side effects should have been executed"
+
+                Expect.isTrue (Exit.isOk result) "effect should have succeeded"
+                ()
+            }
+
+        ]

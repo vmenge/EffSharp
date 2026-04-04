@@ -7,4 +7,8 @@
   <Folder Name="/pkgs/Core/tests/">
     <Project Path="pkgs/Core/tests/Core.Tests.fsproj" />
   </Folder>
+  <Folder Name="/pkgs/Examples/" />
+  <Folder Name="/pkgs/Examples/src/">
+    <Project Path="pkgs/Examples/src/EffFs.Examples.fsproj" />
+  </Folder>
 </Solution>

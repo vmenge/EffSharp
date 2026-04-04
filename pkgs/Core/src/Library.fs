@@ -4,38 +4,69 @@ open System.Threading.Tasks
 
 [<Struct>]
 [<RequireQualifiedAccess>]
-type Eff<'t, 'env> =
+type Eff<'t, 'e, 'env> =
     | Pure of value: 't
-    | Err of err: exn
-    | Delay of delay: (unit -> Eff<'t, 'env>)
+    | Err of err: 'e
+    | Delay of delay: (unit -> Eff<'t, 'e, 'env>)
     | Thunk of thunk: (unit -> 't)
     | Task of tsk: (unit -> Task<'t>)
-    | Async of asy: (unit -> Async<'t>)
     | Read of read: ('env -> 't)
-    | Pending of Pending<'t, 'env>
+    | Pending of Pending<'t, 'e, 'env>
 
-and Pending<'t, 'env> =
+and Pending<'t, 'e, 'env> =
     private
-    | BindTask of source: (unit -> Task<obj>) * cont: (obj -> Eff<'t, 'env>)
-    | BindAsync of source: (unit -> Async<obj>) * cont: (obj -> Eff<'t, 'env>)
-    | BindRead of read: ('env -> obj) * cont: (obj -> Eff<'t, 'env>)
-    | MapPending of source: Eff<obj, 'env> * map: (obj -> 't)
-    | BindPending of source: Eff<obj, 'env> * cont: (obj -> Eff<'t, 'env>)
-    | Ensure of body: Eff<'t, 'env> * cleanup: Eff<unit, 'env>
+    | BindTask of source: (unit -> Task<obj>) * cont: (obj -> Eff<'t, 'e, 'env>)
+    | BindRead of read: ('env -> obj) * cont: (obj -> Eff<'t, 'e, 'env>)
+    | MapPending of source: Eff<obj, 'e, 'env> * map: (obj -> 't)
+    | BindPending of
+        source: Eff<obj, 'e, 'env> *
+        cont: (obj -> Eff<'t, 'e, 'env>)
+    | Ensure of body: Eff<'t, 'e, 'env> * cleanup: Eff<unit, 'e, 'env>
+    | Catch of body: Eff<'t, 'e, 'env> * handler: (exn -> Eff<'t, 'e, 'env>)
+
+[<RequireQualifiedAccess>]
+type Exit<'t, 'e> =
+    | Ok of 't
+    | Err of 'e
+    | Exn of exn
+
+module Exit =
+    let isOk rr =
+        match rr with
+        | Exit.Ok _ -> true
+        | _ -> false
+
+    let ok rr =
+        match rr with
+        | Exit.Ok v -> v
+        | Exit.Err e -> failwith $"{e}"
+        | Exit.Exn e -> raise e
+
+    let err rr =
+        match rr with
+        | Exit.Ok v -> failwith $"{v}"
+        | Exit.Err e -> e
+        | Exit.Exn e -> raise e
+
+    let ex rr =
+        match rr with
+        | Exit.Ok v -> failwith $"{v}"
+        | Exit.Err e -> failwith $"{e}"
+        | Exit.Exn e -> e
 
 exception ValueIsNone
 
 module Eff =
-    type t<'t> = Eff<'t, unit>
-    let inline ask () : Eff<'a, 'a> = Eff.Read id
-    let inline read (f: 'a -> 'b) : Eff<'b, 'a> = Eff.Read f
+    type t<'t> = Eff<'t, unit, unit>
+    let inline ask () : Eff<'a, 'e, 'a> = Eff.Read id
+    let inline read (f: 'a -> 'b) : Eff<'b, 'e, 'a> = Eff.Read f
     let value t = Eff.Pure t
     let err e = Eff.Err e
     let errwith msg = Eff.Err(exn msg)
     let delay f = Eff.Delay f
     let thunk f = Eff.Thunk f
 
-    let ofResult (r: Result<'t, #exn>) =
+    let ofResult (r: Result<'t, 'e>) =
         match r with
         | Ok v -> Eff.Pure v
         | Error e -> Eff.Err e
@@ -68,23 +99,20 @@ module Eff =
     let ofTask f = Eff.Task f
 
     let ofValueTask (f: unit -> ValueTask<'a>) =
-        Eff.Task(fun () ->
-            task {
-                let! x = f ()
-                return x
-            })
+        Eff.Task(fun () -> task {
+            let! x = f ()
+            return x
+        })
 
-    let ofAsync async = Eff.Async async
+    let ofAsync async =
+        Eff.Task(fun () -> async () |> Async.StartAsTask)
 
     let mapErr f ef =
         match ef with
         | Eff.Err e -> Eff.Err(f e)
         | _ -> ef
 
-    let catch f ef =
-        match ef with
-        | Eff.Err e -> f e
-        | _ -> ef
+    let catch f ef = Eff.Pending(Catch(ef, f))
 
     let rec map f ef =
         match ef with
@@ -93,27 +121,25 @@ module Eff =
         | Eff.Delay delay -> Eff.Delay(fun () -> map f (delay ()))
         | Eff.Thunk thunk -> Eff.Thunk(fun () -> f (thunk ()))
         | Eff.Task t ->
-            Eff.Task(fun () ->
-                task {
-                    let! x = t ()
-                    return f x
-                })
-        | Eff.Async asy ->
-            Eff.Async(fun () ->
-                async {
-                    let! x = asy ()
-                    return f x
-                })
+            Eff.Task(fun () -> task {
+                let! x = t ()
+                return f x
+            })
 
         | Eff.Read read -> Eff.Read(fun env -> f (read env))
         | Eff.Pending pending ->
             match pending with
-            | MapPending(source, mapper) -> Eff.Pending(MapPending(source, fun x -> f (mapper x)))
-            | BindTask(source, cont) -> Eff.Pending(BindTask(source, fun x -> cont x |> map f))
-            | BindAsync(source, cont) -> Eff.Pending(BindAsync(source, fun x -> cont x |> map f))
-            | BindRead(read, cont) -> Eff.Pending(BindRead(read, fun x -> cont x |> map f))
-            | BindPending(source, cont) -> Eff.Pending(BindPending(source, fun x -> cont x |> map f))
+            | MapPending(source, mapper) ->
+                Eff.Pending(MapPending(source, fun x -> f (mapper x)))
+            | BindTask(source, cont) ->
+                Eff.Pending(BindTask(source, fun x -> cont x |> map f))
+            | BindRead(read, cont) ->
+                Eff.Pending(BindRead(read, fun x -> cont x |> map f))
+            | BindPending(source, cont) ->
+                Eff.Pending(BindPending(source, fun x -> cont x |> map f))
             | Ensure(body, cleanup) -> Eff.Pending(Ensure(map f body, cleanup))
+            | Catch(body, handler) ->
+                Eff.Pending(Catch(map f body, handler >> map f))
 
 
     let rec bind f ef =
@@ -125,89 +151,89 @@ module Eff =
 
         | Eff.Task tsk ->
             let source =
-                fun () ->
-                    task {
-                        let! x = tsk ()
-                        return box x
-                    }
+                fun () -> task {
+                    let! x = tsk ()
+                    return box x
+                }
 
             let cont = (fun x -> f (unbox x))
             Eff.Pending(BindTask(source, cont))
 
-        | Eff.Async asy ->
-            let source =
-                (fun () ->
-                    async {
-                        let! x = asy ()
-                        return box x
-                    })
-
-            let cont = (fun x -> f (unbox<'t> x))
-            Eff.Pending(BindAsync(source, cont))
-
-        | Eff.Read read -> Eff.Pending(BindRead((fun env -> box (read env)), (fun x -> f (unbox<'t> x))))
+        | Eff.Read read ->
+            Eff.Pending(
+                BindRead(
+                    (fun env -> box (read env)),
+                    (fun x -> f (unbox<'t> x))
+                )
+            )
 
         | Eff.Pending pending ->
             match pending with
-            | BindTask(source, cont) -> Eff.Pending(BindTask(source, fun x -> bind f (cont x)))
-            | BindAsync(source, cont) -> Eff.Pending(BindAsync(source, fun x -> bind f (cont x)))
-            | BindRead(read, cont) -> Eff.Pending(BindRead(read, fun x -> bind f (cont x)))
-            | MapPending(source, mapper) -> Eff.Pending(BindPending(source, fun x -> mapper x |> f))
-            | BindPending(source, cont) -> Eff.Pending(BindPending(source, fun x -> bind f (cont x)))
+            | BindTask(source, cont) ->
+                Eff.Pending(BindTask(source, fun x -> bind f (cont x)))
+            | BindRead(read, cont) ->
+                Eff.Pending(BindRead(read, fun x -> bind f (cont x)))
+            | MapPending(source, mapper) ->
+                Eff.Pending(BindPending(source, fun x -> mapper x |> f))
+            | BindPending(source, cont) ->
+                Eff.Pending(BindPending(source, fun x -> bind f (cont x)))
             | Ensure(body, cleanup) -> Eff.Pending(Ensure(bind f body, cleanup))
+            | Catch(body, handler) ->
+                Eff.Pending(Catch(bind f body, handler >> bind f))
 
     let defer cleanup body = Eff.Pending(Ensure(body, cleanup))
 
     let bracket acquire release usefn =
-        acquire |> bind (fun resource -> usefn resource |> defer (release resource))
+        acquire
+        |> bind (fun resource -> usefn resource |> defer (release resource))
 
-    let rec private runLoop<'t, 'env> (env: 'env) (eff: Eff<'t, 'env>) : Task<Result<'t, exn>> =
+    let rec private runLoop<'t, 'e, 'env>
+        (env: 'env)
+        (eff: Eff<'t, 'e, 'env>)
+        : Task<Exit<'t, 'e>> =
         task {
             let mutable current = eff
             let mutable finished = false
-            let mutable result = Error(exn "unreachable")
+            let mutable result: Exit<'t, 'e> = Exit.Exn(exn "unreachable")
 
             while not finished do
                 match current with
                 | Eff.Pure value ->
-                    result <- Ok value
+                    result <- Exit.Ok value
                     finished <- true
 
                 | Eff.Err err ->
-                    result <- Error err
+                    result <- Exit.Err err
                     finished <- true
 
                 | Eff.Delay delay ->
                     try
                         current <- delay ()
                     with e ->
-                        current <- Eff.Err e
+                        result <- Exit.Exn e
+                        finished <- true
 
                 | Eff.Thunk thunk ->
                     try
                         current <- Eff.Pure(thunk ())
                     with e ->
-                        current <- Eff.Err e
+                        result <- Exit.Exn e
+                        finished <- true
 
                 | Eff.Task tsk ->
                     try
                         let! value = tsk ()
                         current <- Eff.Pure value
                     with e ->
-                        current <- Eff.Err e
-
-                | Eff.Async asy ->
-                    try
-                        let! value = asy () |> Async.StartAsTask
-                        current <- Eff.Pure value
-                    with e ->
-                        current <- Eff.Err e
+                        result <- Exit.Exn e
+                        finished <- true
 
                 | Eff.Read read ->
                     try
                         current <- Eff.Pure(read env)
                     with e ->
-                        current <- Eff.Err e
+                        result <- Exit.Exn e
+                        finished <- true
 
                 | Eff.Pending pending ->
                     match pending with
@@ -216,79 +242,113 @@ module Eff =
                             let! x = source ()
                             current <- cont x
                         with e ->
-                            current <- Eff.Err e
-
-                    | BindAsync(source, cont) ->
-                        try
-                            let! x = source () |> Async.StartAsTask
-                            current <- cont x
-                        with e ->
-                            current <- Eff.Err e
+                            result <- Exit.Exn e
+                            finished <- true
 
                     | BindRead(read, cont) ->
                         try
                             current <- cont (read env)
                         with e ->
-                            current <- Eff.Err e
+                            result <- Exit.Exn e
+                            finished <- true
 
                     | MapPending(source, mapf) -> current <- map mapf source
 
                     | BindPending(source, cont) -> current <- bind cont source
+
                     | Ensure(body, cleanup) ->
                         let! bodyResult = runLoop env body
                         let! cleanupResult = runLoop env cleanup
 
                         match cleanupResult with
-                        | Error e -> current <- Eff.Err e
+                        | Exit.Err e -> current <- Eff.Err e
+                        | Exit.Exn e ->
+                            result <- Exit.Exn e
+                            finished <- true
 
-                        | Ok() ->
+                        | Exit.Ok() ->
                             match bodyResult with
-                            | Ok value -> current <- Eff.Pure value
-                            | Error e -> current <- Eff.Err e
+                            | Exit.Ok value -> current <- Eff.Pure value
+                            | Exit.Err e -> current <- Eff.Err e
+                            | Exit.Exn e ->
+                                result <- Exit.Exn e
+                                finished <- true
+
+                    | Catch(body, handler) ->
+                        let! bodyResult = runLoop env body
+
+                        match bodyResult with
+                        | Exit.Ok value -> current <- Eff.Pure value
+                        | Exit.Err e -> current <- Eff.Err e
+                        | Exit.Exn e -> current <- handler e
 
             return result
         }
 
-    let runTask (env: 'env) (eff: Eff<'t, 'env>) : Task<Result<'t, exn>> = runLoop env eff
+    let runTask (env: 'env) (eff: Eff<'t, 'e, 'env>) : Task<Exit<'t, 'e>> =
+        runLoop env eff
 
-    let runSync (env: 'env) (eff: Eff<'t, 'env>) : Result<'t, exn> =
+    let runSync (env: 'env) (eff: Eff<'t, 'e, 'env>) : Exit<'t, 'e> =
         runTask env eff |> _.GetAwaiter().GetResult()
 
 [<AutoOpen>]
 module CE =
     type EffBuilder() =
-        member _.Yield(value: 't) : Eff<'t, 'env> = Eff.value value
+        member _.Yield(value: 't) : Eff<'t, 'e, 'env> = Eff.value value
 
-        member _.Return(value: 't) : Eff<'t, 'env> = Eff.value value
+        member _.Return(value: 't) : Eff<'t, 'e, 'env> = Eff.value value
 
-        member _.ReturnFrom(eff: Eff<'t, 'env>) : Eff<'t, 'env> = eff
+        member _.ReturnFrom(eff: Eff<'t, 'e, 'env>) : Eff<'t, 'e, 'env> = eff
 
-        member _.Bind(eff: Eff<'t, 'env>, f: 't -> Eff<'u, 'env>) : Eff<'u, 'env> = Eff.bind f eff
+        member _.Bind
+            (eff: Eff<'t, 'e, 'env>, f: 't -> Eff<'u, 'e, 'env>)
+            : Eff<'u, 'e, 'env> =
+            Eff.bind f eff
 
-        member _.BindReturn(eff: Eff<'t, 'env>, f: 't -> 'u) : Eff<'u, 'env> = Eff.map f eff
+        member _.BindReturn
+            (eff: Eff<'t, 'e, 'env>, f: 't -> 'u)
+            : Eff<'u, 'e, 'env> =
+            Eff.map f eff
 
-        member _.Zero() : Eff<unit, 'env> = Eff.value ()
+        member _.Zero() : Eff<unit, 'e, 'env> = Eff.value ()
 
-        member _.Delay(f: unit -> Eff<'t, 'env>) : Eff<'t, 'env> = Eff.delay f
+        member _.Delay(f: unit -> Eff<'t, 'e, 'env>) : Eff<'t, 'e, 'env> =
+            Eff.delay f
 
-        member _.Combine(left: Eff<unit, 'env>, right: Eff<'t, 'env>) : Eff<'t, 'env> = Eff.bind (fun () -> right) left
+        member _.Combine
+            (left: Eff<unit, 'e, 'env>, right: Eff<'t, 'e, 'env>)
+            : Eff<'t, 'e, 'env> =
+            Eff.bind (fun () -> right) left
 
-        member _.TryWith(body: unit -> Eff<'t, 'env>, handler: exn -> Eff<'t, 'env>) : Eff<'t, 'env> =
+        member _.TryWith
+            (body: unit -> Eff<'t, 'e, 'env>, handler: exn -> Eff<'t, 'e, 'env>)
+            : Eff<'t, 'e, 'env> =
             Eff.delay body |> Eff.catch handler
 
-        member _.TryFinally(body: Eff<'t, 'env>, compensation: unit -> unit) : Eff<'t, 'env> =
+        member _.TryFinally
+            (body: Eff<'t, 'e, 'env>, compensation: unit -> unit)
+            : Eff<'t, 'e, 'env> =
             Eff.defer (Eff.thunk compensation) body
 
-        member _.Using(resource: 'r, binder: 'r -> Eff<'t, 'env>) : Eff<'t, 'env> when 'r :> System.IDisposable =
-            Eff.bracket (Eff.value resource) (fun r -> Eff.thunk (fun () -> r.Dispose())) binder
+        member _.Using
+            (resource: 'r, binder: 'r -> Eff<'t, 'e, 'env>)
+            : Eff<'t, 'e, 'env> when 'r :> System.IDisposable =
+            Eff.bracket
+                (Eff.value resource)
+                (fun r -> Eff.thunk (fun () -> r.Dispose()))
+                binder
 
-        member this.While(guard: unit -> bool, body: Eff<unit, 'env>) : Eff<unit, 'env> =
+        member this.While
+            (guard: unit -> bool, body: Eff<unit, 'e, 'env>)
+            : Eff<unit, 'e, 'env> =
             if not (guard ()) then
                 Eff.value ()
             else
                 Eff.bind (fun () -> this.While(guard, body)) body
 
-        member _.For(sequence: seq<'t>, body: 't -> Eff<unit, 'env>) : Eff<unit, 'env> =
+        member _.For
+            (sequence: seq<'t>, body: 't -> Eff<unit, 'e, 'env>)
+            : Eff<unit, 'e, 'env> =
             use enumerator = sequence.GetEnumerator()
 
             let rec loop () =
@@ -300,43 +360,68 @@ module CE =
             loop ()
 
         [<CustomOperation("defer", MaintainsVariableSpaceUsingBind = true)>]
-        member _.Defer(state: Eff<'t, 'env>, [<ProjectionParameter>] cleanup: 't -> Eff<unit, 'env>) : Eff<'t, 'env> =
+        member _.Defer
+            (
+                state: Eff<'t, 'e, 'env>,
+                [<ProjectionParameter>] cleanup: 't -> Eff<unit, 'e, 'env>
+            ) : Eff<'t, 'e, 'env> =
             state
-            |> Eff.bind (fun vspace -> Eff.defer (cleanup vspace) (Eff.value vspace))
+            |> Eff.bind (fun vspace ->
+                Eff.defer (cleanup vspace) (Eff.value vspace)
+            )
 
         [<CustomOperation("defer", MaintainsVariableSpaceUsingBind = true)>]
-        member _.Defer(state: Eff<'t, 'env>, [<ProjectionParameter>] cleanup: 't -> unit -> unit) : Eff<'t, 'env> =
+        member _.Defer
+            (
+                state: Eff<'t, 'e, 'env>,
+                [<ProjectionParameter>] cleanup: 't -> unit -> unit
+            ) : Eff<'t, 'e, 'env> =
             state
-            |> Eff.bind (fun vspace -> Eff.defer (Eff.thunk (cleanup vspace)) (Eff.value vspace))
+            |> Eff.bind (fun vspace ->
+                Eff.defer (Eff.thunk (cleanup vspace)) (Eff.value vspace)
+            )
 
-        member _.Source(eff: Eff<'t, 'env>) : Eff<'t, 'env> = eff
+        member _.Source(eff: Eff<'t, 'e, 'env>) : Eff<'t, 'e, 'env> = eff
 
 
     [<AutoOpen>]
     module CEExtLowPriority =
         type EffBuilder with
-            member _.Source(valueTask: ValueTask<'t>) : Eff<'t, 'env> = Eff.ofValueTask (fun () -> valueTask)
+            member _.Source(valueTask: ValueTask<'t>) : Eff<'t, 'e, 'env> =
+                Eff.ofValueTask (fun () -> valueTask)
 
-            member _.Source(task: Task<'t>) : Eff<'t, 'env> = Eff.ofTask (fun () -> task)
+            member _.Source(task: Task<'t>) : Eff<'t, 'e, 'env> =
+                Eff.ofTask (fun () -> task)
 
-            member _.Source(async: Async<'t>) : Eff<'t, 'env> = Eff.ofAsync (fun () -> async)
+            member _.Source(async: Async<'t>) : Eff<'t, 'e, 'env> =
+                Eff.ofAsync (fun () -> async)
 
     [<AutoOpen>]
     module CEExtHighPriority =
         type EffBuilder with
-            member _.Source(valueTaskResult: ValueTask<Result<'t, exn>>) : Eff<'t, 'env> =
-                Eff.ofValueTask (fun () -> valueTaskResult) |> Eff.bind Eff.ofResult
+            member _.Source
+                (valueTaskResult: ValueTask<Result<'t, 'e>>)
+                : Eff<'t, 'e, 'env> =
+                Eff.ofValueTask (fun () -> valueTaskResult)
+                |> Eff.bind Eff.ofResult
 
-            member _.Source(taskResult: Task<Result<'t, #exn>>) : Eff<'t, 'env> =
+            member _.Source
+                (taskResult: Task<Result<'t, 'e>>)
+                : Eff<'t, 'e, 'env> =
                 Eff.ofTask (fun () -> taskResult) |> Eff.bind Eff.ofResult
 
-            member _.Source(asyncResult: Async<Result<'t, #exn>>) : Eff<'t, 'env> =
+            member _.Source
+                (asyncResult: Async<Result<'t, 'e>>)
+                : Eff<'t, 'e, 'env> =
                 Eff.ofAsync (fun () -> asyncResult) |> Eff.bind Eff.ofResult
 
-            member _.Source(result: Result<'t, #exn>) : Eff<'t, 'env> = Eff.ofResult result
+            member _.Source(result: Result<'t, 'e>) : Eff<'t, 'e, 'env> =
+                Eff.ofResult result
 
-            member _.Source(option: Option<'t>) : Eff<'t, 'env> = Eff.ofOption option
+            member _.Source(option: Option<'t>) : Eff<'t, exn, 'env> =
+                Eff.ofOption option
 
-            member _.Source(valueOption: ValueOption<'t>) : Eff<'t, 'env> = Eff.ofValueOption valueOption
+            member _.Source(valueOption: ValueOption<'t>) : Eff<'t, exn, 'env> =
+                Eff.ofValueOption valueOption
 
     let eff = EffBuilder()
