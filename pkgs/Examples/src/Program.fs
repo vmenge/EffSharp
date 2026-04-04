@@ -1,14 +1,19 @@
 ﻿open EffFs.Core
 
-exception One
-exception Two
+let readFile filename : Eff<string, exn, _> = Eff.value "file contents"
 
-let doOne () : Eff<_, exn, _> = Eff.err One
-let doTwo () = Eff.err Two
+let parseFile fileContents : Result<{| name: string |}, string> =
+    Ok {| name = "bla" |}
 
 let x () = eff {
-    do! doOne ()
-    do! doTwo ()
+    let! contents = readFile "bla"
+    let! parsed = parseFile contents |> Result.mapError exn
+
+    printfn $"{parsed}"
 
     ()
 }
+
+let y () =
+    readFile "bla"
+    |> Eff.bind (fun contents -> contents |> parseFile |> Eff.ofResultWith exn)
