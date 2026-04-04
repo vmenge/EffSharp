@@ -183,8 +183,6 @@ module Eff =
             | Defer(body, cleanup) ->
                 Eff.Pending(Defer(mapErr f body, mapErrUnit f cleanup))
 
-    let toReport (e: Eff<_, 'e, _>) : Eff<_, exn, _> = e |> mapErr Report.make
-
     let rec map f ef =
         match ef with
         | Eff.Pure v -> Eff.Pure(f v)

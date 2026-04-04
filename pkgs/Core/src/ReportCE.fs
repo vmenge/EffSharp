@@ -7,20 +7,20 @@ module ReportCE =
         inherit CE.EffBuilderBase()
 
         member _.ReturnFrom(eff: Eff<'t, 'e, 'env>) : Eff<'t, exn, 'env> =
-            eff |> Eff.toReport
+            eff |> Eff.mapErr Report.make
 
         member _.Bind
             (eff: Eff<'t, 'e, 'env>, f: 't -> Eff<'u, 'e, 'env>)
             : Eff<'u, exn, 'env> =
-            Eff.bind f eff |> Eff.toReport
+            Eff.bind f eff |> Eff.mapErr Report.make
 
         member _.BindReturn
             (eff: Eff<'t, 'e, 'env>, f: 't -> 'u)
             : Eff<'u, exn, 'env> =
-            Eff.map f eff |> Eff.toReport
+            Eff.map f eff |> Eff.mapErr Report.make
 
         member _.Source(eff: Eff<'t, 'e, 'env>) : Eff<'t, exn, 'env> =
-            eff |> Eff.toReport
+            eff |> Eff.mapErr Report.make
 
     [<AutoOpen>]
     module CEExtLowPriority =
@@ -41,24 +41,24 @@ module ReportCE =
                 (valueTaskResult: ValueTask<Result<'t, 'e>>)
                 : Eff<'t, exn, 'env> =
                 Eff.ofValueTask (fun () -> valueTaskResult)
-                |> Eff.bind (Eff.ofResult >> Eff.toReport)
+                |> Eff.bind (Eff.ofResult >> (Eff.mapErr Report.make))
 
             member _.Source
                 (taskResult: Task<Result<'t, 'e>>)
                 : Eff<'t, exn, 'env> =
                 Eff.ofTask (fun () -> taskResult)
                 |> Eff.bind Eff.ofResult
-                |> Eff.toReport
+                |> Eff.mapErr Report.make
 
             member _.Source
                 (asyncResult: Async<Result<'t, 'e>>)
                 : Eff<'t, exn, 'env> =
                 Eff.ofAsync (fun () -> asyncResult)
                 |> Eff.bind Eff.ofResult
-                |> Eff.toReport
+                |> Eff.mapErr Report.make
 
             member _.Source(result: Result<'t, 'e>) : Eff<'t, exn, 'env> =
-                Eff.ofResult result |> Eff.toReport
+                Eff.ofResult result |> Eff.mapErr Report.make
 
             member _.Source(option: Option<'t>) : Eff<'t, exn, 'env> =
                 Eff.ofOption option
