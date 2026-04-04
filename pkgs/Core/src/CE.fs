@@ -2,6 +2,7 @@ namespace EffFs.Core
 
 open System.Threading.Tasks
 
+[<AutoOpen>]
 module CE =
     type EffBuilderBase() =
         member _.Yield(value: 't) : Eff<'t, 'e, 'env> = Eff.value value

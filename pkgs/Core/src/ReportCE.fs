@@ -2,8 +2,9 @@ namespace EffFs.Core
 
 open System.Threading.Tasks
 
+[<AutoOpen>]
 module ReportCE =
-    type EffBuilder() =
+    type EffrBuilder() =
         inherit CE.EffBuilderBase()
 
         member _.ReturnFrom(eff: Eff<'t, 'e, 'env>) : Eff<'t, exn, 'env> =
@@ -24,7 +25,7 @@ module ReportCE =
 
     [<AutoOpen>]
     module CEExtLowPriority =
-        type EffBuilder with
+        type EffrBuilder with
             member _.Source(valueTask: ValueTask<'t>) : Eff<'t, exn, 'env> =
                 Eff.ofValueTask (fun () -> valueTask)
 
@@ -36,7 +37,7 @@ module ReportCE =
 
     [<AutoOpen>]
     module CEExtHighPriority =
-        type EffBuilder with
+        type EffrBuilder with
             member _.Source
                 (valueTaskResult: ValueTask<Result<'t, 'e>>)
                 : Eff<'t, exn, 'env> =
@@ -66,4 +67,4 @@ module ReportCE =
             member _.Source(valueOption: ValueOption<'t>) : Eff<'t, exn, 'env> =
                 Eff.ofValueOption valueOption
 
-    let eff = EffBuilder()
+    let effr = EffrBuilder()

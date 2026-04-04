@@ -7,7 +7,6 @@ module CE =
     open Expecto
     open System.Threading.Tasks
     open EffFs.Core
-    open EffFs.Core.CE
 
     type ForProbe(items: int list) =
         let items = List.toArray items
@@ -20,30 +19,33 @@ module CE =
                 member _.Current = items.[index]
 
               interface IEnumerator with
-                member _.Current = box items.[index]
+                  member _.Current = box items.[index]
 
-                member _.MoveNext() =
-                    if disposed then failwith "disposed"
+                  member _.MoveNext() =
+                      if disposed then
+                          failwith "disposed"
 
-                    if index + 1 < items.Length then
-                        index <- index + 1
-                        true
-                    else
-                        false
+                      if index + 1 < items.Length then
+                          index <- index + 1
+                          true
+                      else
+                          false
 
-                member _.Reset() = index <- -1
+                  member _.Reset() = index <- -1
 
               interface IDisposable with
-                member _.Dispose() = disposed <- true }
+                  member _.Dispose() = disposed <- true
+            }
 
         member _.Disposed = disposed
 
-        member _.Sequence : seq<int> =
+        member _.Sequence: seq<int> =
             { new IEnumerable<int> with
                 member _.GetEnumerator() = newEnumerator ()
 
               interface IEnumerable with
-                member _.GetEnumerator() = newEnumerator () :> IEnumerator }
+                  member _.GetEnumerator() = newEnumerator () :> IEnumerator
+            }
 
     type DisposeProbe() =
         let mutable disposed = false
@@ -335,8 +337,12 @@ module CE =
                     }
                     |> Eff.runTask ()
 
-                Expect.equal value (Exit.Ok ()) "for loop should complete"
-                Expect.sequenceEqual values [ 1; 2; 3 ] "for loop should visit every element"
+                Expect.equal value (Exit.Ok()) "for loop should complete"
+
+                Expect.sequenceEqual
+                    values
+                    [ 1; 2; 3 ]
+                    "for loop should visit every element"
             }
 
             testTask "for keeps enumerator alive across effectful bodies" {
@@ -348,15 +354,25 @@ module CE =
                         for x in probe.Sequence do
                             do!
                                 Eff.ofTask (fun () -> task {
-                                    Expect.isFalse probe.Disposed "enumerator should still be alive during the body"
+                                    Expect.isFalse
+                                        probe.Disposed
+                                        "enumerator should still be alive during the body"
+
                                     values.Add x
                                 })
                     }
                     |> Eff.runTask ()
 
-                Expect.equal value (Exit.Ok ()) "for loop should complete"
-                Expect.sequenceEqual values [ 1; 2 ] "for loop should visit every element"
-                Expect.isTrue probe.Disposed "enumerator should be disposed after the loop"
+                Expect.equal value (Exit.Ok()) "for loop should complete"
+
+                Expect.sequenceEqual
+                    values
+                    [ 1; 2 ]
+                    "for loop should visit every element"
+
+                Expect.isTrue
+                    probe.Disposed
+                    "enumerator should be disposed after the loop"
             }
 
             testTask "for disposes enumerator when the body fails" {
@@ -370,8 +386,14 @@ module CE =
                     }
                     |> Eff.runTask ()
 
-                Expect.equal value (Exit.Err "boom") "body error should short-circuit the loop"
-                Expect.isTrue probe.Disposed "enumerator should still be disposed"
+                Expect.equal
+                    value
+                    (Exit.Err "boom")
+                    "body error should short-circuit the loop"
+
+                Expect.isTrue
+                    probe.Disposed
+                    "enumerator should still be disposed"
             }
 
             testTask "multiple defers still run on failure" {
