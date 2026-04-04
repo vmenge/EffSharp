@@ -30,7 +30,7 @@ module ReportCE =
                 Expect.equal err.Message "boom" "report message should come from the original error"
 
                 match err with
-                | Report.ReportAs (wrapped: string) ->
+                |ReportAs (wrapped: string) ->
                     Expect.equal wrapped "boom" "report should preserve the original error payload"
                 | _ ->
                     failtest "expected Report carrying the original string"
@@ -115,7 +115,7 @@ module ReportCE =
                     failtest "expected Report carrying None"
             }
 
-            testTask "existing exceptions are not rewrapped" {
+            testTask "existing exceptions are wrapped once and preserved as inner exceptions" {
                 let boom = exn "boom"
 
                 let! value =
@@ -127,7 +127,9 @@ module ReportCE =
 
                 let err: exn = Exit.err value
 
-                Expect.isTrue (obj.ReferenceEquals(err, boom)) "existing exceptions should flow through unchanged"
+                Expect.equal (err.GetType()) typeof<Report> "plain exceptions should normalize to Report"
+                Expect.equal err.Message "boom" "report message should match the original exception"
+                Expect.isTrue (obj.ReferenceEquals(err.InnerException, boom)) "original exception should be preserved as InnerException"
             }
 
             testTask "existing reports are not rewrapped" {
