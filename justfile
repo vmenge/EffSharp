@@ -1,7 +1,7 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 test:
-    projects=$(find . -path '*/tests/*.fsproj' | sort); \
+    projects=$(find . -path '*/tests/*.fsproj' ! -path '*/tests/Fixtures/*' | sort); \
     if [ -z "$projects" ]; then \
       echo "No test projects found under */tests/"; \
       exit 1; \
