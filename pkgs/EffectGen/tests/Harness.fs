@@ -1,6 +1,7 @@
 namespace EffFs.EffectGen.Tests
 
 open System.Diagnostics
+open System.IO
 open System.Threading.Tasks
 
 module Harness =
@@ -8,6 +9,15 @@ module Harness =
     ExitCode: int
     Output: string
   }
+
+  let private repoRoot =
+    Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", ".."))
+
+  let private coreProject =
+    Path.Combine(repoRoot, "pkgs", "Core", "src", "Core.fsproj")
+
+  let private effectGenProject =
+    Path.Combine(repoRoot, "pkgs", "EffectGen", "src", "EffectGen.fsproj")
 
   let private runDotnet (workingDirectory: string option) (arguments: string) : Task<BuildResult> = task {
     let startInfo = ProcessStartInfo("dotnet", arguments)
@@ -35,8 +45,21 @@ module Harness =
     }
   }
 
-  let buildProject (projectPath: string) : Task<BuildResult> =
-    runDotnet None $"build \"{projectPath}\" --nologo -t:Rebuild"
+  let private ensureProjectBuild (projectPath: string) = task {
+    let! result = runDotnet None $"build \"{projectPath}\" --nologo"
 
-  let packProject (projectPath: string) (outputDirectory: string) : Task<BuildResult> =
-    runDotnet None $"pack \"{projectPath}\" --nologo -o \"{outputDirectory}\""
+    if result.ExitCode <> 0 then
+      failwith $"failed to build prerequisite project {projectPath}{System.Environment.NewLine}{result.Output}"
+  }
+
+  let buildProject (projectPath: string) : Task<BuildResult> = task {
+    do! ensureProjectBuild coreProject
+    do! ensureProjectBuild effectGenProject
+    return! runDotnet None $"build \"{projectPath}\" --nologo -t:Rebuild"
+  }
+
+  let packProject (projectPath: string) (outputDirectory: string) : Task<BuildResult> = task {
+    do! ensureProjectBuild coreProject
+    do! ensureProjectBuild effectGenProject
+    return! runDotnet None $"pack \"{projectPath}\" --nologo --no-build -p:Configuration=Debug -o \"{outputDirectory}\""
+  }
