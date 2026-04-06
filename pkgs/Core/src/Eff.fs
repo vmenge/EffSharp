@@ -6,6 +6,7 @@ open System.Threading.Tasks
 type Eff<'t, 'e, 'env> =
   | Pure of value: 't
   | Err of err: 'e
+  | Crash of exn: exn
   | Suspend of suspend: (unit -> Eff<'t, 'e, 'env>)
   | Thunk of thunk: (unit -> 't)
   | Task of tsk: (unit -> Task<'t>)
@@ -102,6 +103,20 @@ and private FlatMapErrFrame<'t, 'e, 'env>(handler: 'e -> Eff<'t, 'e, 'env>) =
       ContinueWithExit(BoxedExn ex, rest)
 
   override _.HandleExn(ex, rest) = ContinueWithExit(BoxedExn ex, rest)
+
+and private FlatMapExnFrame<'t, 'e, 'env>(handler: exn -> Eff<'t, 'e, 'env>) =
+  inherit Frame<'env>()
+  override _.HandleOk(value, rest) = ContinueWithExit(BoxedOk value, rest)
+  override _.HandleErr(err, rest) = ContinueWithExit(BoxedErr err, rest)
+
+  override _.HandleExn(ex, rest) =
+    try
+      ContinueWithEff(
+        (BoxedEff<'t, 'e, 'env>(handler ex) :> BoxedEff<'env>),
+        rest
+      )
+    with handlerEx ->
+      ContinueWithExit(BoxedExn handlerEx, rest)
 
 and private DeferFrame<'e, 'env>(cleanup: Eff<unit, 'e, 'env>) =
   inherit Frame<'env>()
@@ -245,6 +260,17 @@ and private FlatMapErr<'t, 'e, 'env>
         (FlatMapErrFrame<'t, 'e, 'env>(handler) :> Frame<'env>) :: frames
       )
 
+and private FlatMapExn<'t, 'e, 'env>
+  (body: Eff<'t, 'e, 'env>, handler: exn -> Eff<'t, 'e, 'env>) =
+  inherit Node<'t, 'e, 'env>()
+
+  interface INodeRuntime<'env> with
+    member _.Enter(frames) =
+      Continue(
+        (BoxedEff<'t, 'e, 'env>(body) :> BoxedEff<'env>),
+        (FlatMapExnFrame<'t, 'e, 'env>(handler) :> Frame<'env>) :: frames
+      )
+
 and private Defer<'t, 'e, 'env>
   (body: Eff<'t, 'e, 'env>, cleanup: Eff<unit, 'e, 'env>) =
   inherit Node<'t, 'e, 'env>()
@@ -360,6 +386,7 @@ module Eff =
     match ef with
     | Eff.Pure v -> Eff.Pure v
     | Eff.Err e -> Eff.Err(f e)
+    | Eff.Crash ex -> Eff.Crash ex
     | Eff.Suspend suspend -> Eff.Suspend(fun () -> mapErr f (suspend ()))
     | Eff.Thunk thunk -> Eff.Thunk thunk
     | Eff.Task tsk -> Eff.Task tsk
@@ -370,6 +397,7 @@ module Eff =
     match ef with
     | Eff.Pure v -> Eff.Pure(f v)
     | Eff.Err err -> Eff.Err err
+    | Eff.Crash ex -> Eff.Crash ex
     | Eff.Suspend suspend -> Eff.Suspend(fun () -> map f (suspend ()))
     | Eff.Thunk thunk -> Eff.Thunk(fun () -> f (thunk ()))
     | Eff.Task t ->
@@ -386,6 +414,7 @@ module Eff =
     match ef with
     | Eff.Pure v -> f v
     | Eff.Err err -> Eff.Err err
+    | Eff.Crash ex -> Eff.Crash ex
     | Eff.Suspend _ -> Eff.Node(FlatMap(ef, f))
     | Eff.Thunk thunk -> Eff.Suspend(fun () -> f (thunk ()))
     | Eff.Task _ -> Eff.Node(FlatMap(ef, f))
@@ -458,6 +487,18 @@ module Eff =
     : Eff<'t, 'e, 'env> =
     ef |> orElseWith (fun e -> f e |> bind (fun _ -> Err e))
 
+  let catch
+    (handler: exn -> Eff<'t, 'e, 'env>)
+    (eff: Eff<'t, 'e, 'env>)
+    : Eff<'t, 'e, 'env> =
+    Eff.Node(FlatMapExn(eff, handler))
+
+  let tapExn
+    (f: exn -> Eff<'k, 'e, 'env>)
+    (eff: Eff<'t, 'e, 'env>)
+    : Eff<'t, 'e, 'env> =
+    catch (fun ex -> f ex |> bind (fun _ -> Crash ex)) eff
+
   let orRaise eff : Eff<_, unit, _> =
     eff |> orElseWith (fun e -> Thunk(fun () -> raise (Report.make e)))
 
@@ -529,6 +570,9 @@ module Eff =
         finished <- true
       | Eff.Err err ->
         result <- ValueSome(unwind stepper (BoxedErr(box err)) currentFrames)
+        finished <- true
+      | Eff.Crash ex ->
+        result <- ValueSome(unwind stepper (BoxedExn ex) currentFrames)
         finished <- true
       | Eff.Suspend suspend ->
         try

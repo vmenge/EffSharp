@@ -422,6 +422,103 @@ module Eff =
           "handler defects should override the original error"
       }
 
+      testTask "catch recovers from defects" {
+        let! value =
+          Eff.thunk (fun () -> failwith "boom")
+          |> Eff.catch (fun ex -> Pure ex.Message)
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Ok "boom") "should recover from defects"
+      }
+
+      testTask "catch does not handle managed errors" {
+        let! value =
+          Err "boom"
+          |> Eff.catch (fun _ -> Pure "recovered")
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Err "boom") "should preserve managed errors"
+      }
+
+      testTask "catch handler defect replaces the original defect" {
+        let! value =
+          Eff.thunk (fun () -> failwith "boom")
+          |> Eff.catch (fun _ -> Eff.thunk (fun () -> failwith "replacement"))
+          |> Eff.runTask ()
+
+        let err: exn = Exit.ex value
+        Expect.equal err.Message "replacement" "handler defect should override"
+      }
+
+      testTask "tapExn runs side effect and preserves the original defect" {
+        let mutable seen = ""
+
+        let! value =
+          Eff.thunk (fun () -> failwith "boom")
+          |> Eff.tapExn (fun ex ->
+            Eff.thunk (fun () -> seen <- $"logged: {ex.Message}")
+          )
+          |> Eff.runTask ()
+
+        let err: exn = Exit.ex value
+
+        Expect.equal err.Message "boom" "should preserve the original defect"
+        Expect.equal seen "logged: boom" "should run the tapExn side effect"
+      }
+
+      testTask "tapExn does not run on managed errors" {
+        let mutable called = false
+
+        let! value =
+          Err "boom"
+          |> Eff.tapExn (fun _ ->
+            Eff.thunk (fun () -> called <- true)
+          )
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Err "boom") "should preserve managed errors"
+        Expect.isFalse called "tapExn should not run on managed errors"
+      }
+
+      testTask "tapExn handler error overrides the original defect" {
+        let! value =
+          Eff.thunk (fun () -> failwith "boom")
+          |> Eff.tapExn (fun _ -> Err "handler failed")
+          |> Eff.runTask ()
+
+        Expect.equal
+          value
+          (Exit.Err "handler failed")
+          "handler errors should override the original defect"
+      }
+
+      testTask "tapExn handler defect overrides the original defect" {
+        let! value =
+          Eff.thunk (fun () -> failwith "boom")
+          |> Eff.tapExn (fun _ -> Eff.thunk (fun () -> failwith "tap failed"))
+          |> Eff.runTask ()
+
+        let err: exn = Exit.ex value
+
+        Expect.equal
+          err.Message
+          "tap failed"
+          "handler defects should override the original defect"
+      }
+
+      testTask "defer runs before catch handles a defect" {
+        let mutable cleaned = false
+
+        let! value =
+          Eff.thunk (fun () -> failwith "boom")
+          |> Eff.defer (Eff.thunk (fun () -> cleaned <- true))
+          |> Eff.catch (fun ex -> Pure ex.Message)
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Ok "boom") "should recover from the defect"
+        Expect.isTrue cleaned "defer should run before catch handles the defect"
+      }
+
       testTask "bracket releases after success" {
         let events = ResizeArray<string>()
 
