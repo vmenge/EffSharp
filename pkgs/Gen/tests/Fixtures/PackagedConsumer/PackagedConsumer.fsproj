@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -10,8 +10,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Core\src\Core.fsproj" />
-    <ProjectReference Include="..\..\Gen\src\Gen.fsproj" />
+    <ProjectReference Include="..\..\..\..\Core\src\Core.fsproj" />
+    <PackageReference Include="Gen" />
+    <PackageVersion Include="Gen" Version="1.0.0" />
   </ItemGroup>
 
 </Project>

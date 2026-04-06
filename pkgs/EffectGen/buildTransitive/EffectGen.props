@@ -1,5 +1,0 @@
-<Project>
-  <PropertyGroup>
-    <EffectGenEnabled Condition="'$(EffectGenEnabled)' == ''">true</EffectGenEnabled>
-  </PropertyGroup>
-</Project>

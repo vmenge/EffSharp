@@ -1,4 +1,4 @@
-namespace EffFs.Examples
+namespace PackagedConsumer
 
 open EffFs.Gen
 

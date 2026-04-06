@@ -1,0 +1,49 @@
+<Project>
+  <PropertyGroup>
+    <GenTaskAssemblyPath Condition="'$(GenTaskAssemblyPath)' == '' and Exists('$(MSBuildThisFileDirectory)..\src\bin\$(Configuration)\$(TargetFramework)\Gen.dll')">$(MSBuildThisFileDirectory)..\src\bin\$(Configuration)\$(TargetFramework)\Gen.dll</GenTaskAssemblyPath>
+    <GenTaskAssemblyPath Condition="'$(GenTaskAssemblyPath)' == ''">$(MSBuildThisFileDirectory)$(TargetFramework)\Gen.dll</GenTaskAssemblyPath>
+  </PropertyGroup>
+
+  <UsingTask
+    TaskName="EffFs.Gen.GenerateEffectFilesTask"
+    AssemblyFile="$(GenTaskAssemblyPath)"
+    Runtime="NET"
+    Architecture="*"
+    TaskFactory="TaskHostFactory"
+    Condition="'$(GenEnabled)' == 'true' and Exists('$(GenTaskAssemblyPath)') and '$(MSBuildRuntimeType)' == 'Full'" />
+
+  <UsingTask
+    TaskName="EffFs.Gen.GenerateEffectFilesTask"
+    AssemblyFile="$(GenTaskAssemblyPath)"
+    Runtime="NET"
+    Architecture="*"
+    Condition="'$(GenEnabled)' == 'true' and Exists('$(GenTaskAssemblyPath)') and '$(MSBuildRuntimeType)' == 'Core'" />
+
+  <Target
+    Name="GenGenerateSources"
+    BeforeTargets="FSharpSourceCodeCompileOrder"
+    Condition="'$(GenEnabled)' == 'true' and '$(Language)' == 'F#' and Exists('$(GenTaskAssemblyPath)')">
+    <ItemGroup>
+      <_GenDefine Include="$(DefineConstants)" Condition="'$(DefineConstants)' != ''" />
+      <_GenParseCommandLineArg Include="--targetprofile:$(TargetProfile)" Condition="'$(TargetProfile)' != ''" />
+      <_GenParseCommandLineArg Include="--langversion:$(LangVersion)" Condition="'$(LangVersion)' != ''" />
+      <_GenParseCommandLineArg Include="@(_GenDefine->'--define:%(Identity)')" />
+      <_GenParseCommandLineArg Include="@(DisabledLanguageFeatures->'--disable-language-feature:%(Identity)')" />
+    </ItemGroup>
+
+    <GenerateEffectFilesTask
+      ProjectDirectory="$(MSBuildProjectDirectory)"
+      IntermediateOutputPath="$(IntermediateOutputPath)"
+      CompileItems="@(Compile)"
+      ParseCommandLineArgs="@(_GenParseCommandLineArg)"
+      OtherFlags="$(OtherFlags)">
+      <Output TaskParameter="GeneratedFiles" ItemName="FileWrites" />
+      <Output TaskParameter="OrderedCompileItems" ItemName="_GenOrderedCompile" />
+    </GenerateEffectFilesTask>
+
+    <ItemGroup>
+      <Compile Remove="@(Compile)" />
+      <Compile Include="@(_GenOrderedCompile)" />
+    </ItemGroup>
+  </Target>
+</Project>

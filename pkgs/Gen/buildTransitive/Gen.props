@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <GenEnabled Condition="'$(GenEnabled)' == ''">true</GenEnabled>
+  </PropertyGroup>
+</Project>

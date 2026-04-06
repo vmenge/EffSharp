@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Harness.fs" />
+    <Compile Include="HarnessTests.fs" />
+    <Compile Include="ScaffoldTests.fs" />
+    <Compile Include="RedE2E.fs" />
+    <Compile Include="ParseOptionsE2E.fs" />
+    <Compile Include="SupportedSyncE2E.fs" />
+    <Compile Include="SupportedAsyncE2E.fs" />
+    <Compile Include="QualifiedReturnTypesE2E.fs" />
+    <Compile Include="SupportedEffExactE2E.fs" />
+    <Compile Include="SupportedEffProvideFromE2E.fs" />
+    <Compile Include="DiagnosticsE2E.fs" />
+    <Compile Include="PackagedConsumerE2E.fs" />
+    <Compile Include="ValidationTests.fs" />
+    <Compile Include="ExampleE2E.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Expecto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\Gen.fsproj" />
+    <ProjectReference Include="..\..\Core\src\Core.fsproj" />
+  </ItemGroup>
+
+</Project>

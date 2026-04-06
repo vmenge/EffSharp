@@ -16,7 +16,7 @@ let greetingProgram (name: string) : Eff<string, exn, #EGreeter> =
   EGreeter.greet name
 
 let exampleGreeting () =
-  greetingProgram "EffectGen"
+  greetingProgram "Gen"
   |> Eff.runSync (AppEnv())
 
 let run () =
