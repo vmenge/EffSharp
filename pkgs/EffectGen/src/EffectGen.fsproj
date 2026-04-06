@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="EffectAttribute.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\buildTransitive\EffectGen.props" Pack="true" PackagePath="buildTransitive\EffectGen.props" Visible="false" />
+    <None Include="..\buildTransitive\EffectGen.targets" Pack="true" PackagePath="buildTransitive\EffectGen.targets" Visible="false" />
+  </ItemGroup>
+
+</Project>
