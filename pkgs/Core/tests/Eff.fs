@@ -260,6 +260,181 @@ module Eff =
         Expect.equal value (Exit.Ok "43") "should project UserId from env"
       }
 
+      testTask "flatten unwraps nested pure" {
+        let! value =
+          Pure(Pure 42)
+          |> Eff.flatten
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Ok 42) "should unwrap the inner effect"
+      }
+
+      testTask "flatten preserves outer error" {
+        let! value =
+          Err "boom"
+          |> Eff.flatten
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Err "boom") "outer error should short-circuit"
+      }
+
+      testTask "flatten preserves inner error" {
+        let! value =
+          Pure(Err "boom")
+          |> Eff.flatten
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Err "boom") "inner error should be preserved"
+      }
+
+      testTask "flatten runs inner effect in the same ambient environment" {
+        let nested : Eff<Eff<int, unit, {| UserId: int |}>, unit, {| UserId: int |}> =
+          Pure(Eff.read (fun (env: {| UserId: int |}) -> env.UserId))
+
+        let! value =
+          nested
+          |> Eff.flatten
+          |> Eff.runTask {| UserId = 42 |}
+
+        Expect.equal value (Exit.Ok 42) "inner effect should see the same env"
+      }
+
+      testTask "provide supplies a concrete environment" {
+        let! value =
+          Eff.read id
+          |> Eff.provide 42
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Ok 42) "should use the provided environment"
+      }
+
+      testTask "provideFrom projects a larger environment" {
+        let inner : Eff<int, unit, {| UserId: int |}> =
+          Eff.read (fun (env: {| UserId: int |}) -> env.UserId + 1)
+
+        let! value =
+          inner
+          |> Eff.provideFrom (fun (env: {| UserId: int; Name: string |}) ->
+            {| UserId = env.UserId |})
+          |> Eff.runTask {| UserId = 41; Name = "Victor" |}
+
+        Expect.equal value (Exit.Ok 42) "should project the outer environment"
+      }
+
+      testTask "provideFrom only scopes the subtree" {
+        let program : Eff<string * int * string, unit, {| UserId: int; Name: string |}> =
+          eff {
+            let! before =
+              Eff.read (fun (env: {| UserId: int; Name: string |}) -> env.Name)
+
+            let! userId =
+              (Eff.read (fun (env: {| UserId: int |}) -> env.UserId)
+               |> Eff.provideFrom (fun (env: {| UserId: int; Name: string |}) ->
+                 {| UserId = env.UserId |}))
+
+            let! after =
+              Eff.read (fun (env: {| UserId: int; Name: string |}) -> env.Name)
+
+            return before, userId, after
+          }
+
+        let! value = program |> Eff.runTask {| UserId = 42; Name = "Victor" |}
+
+        Expect.equal
+          value
+          (Exit.Ok("Victor", 42, "Victor"))
+          "outer environment should remain visible before and after the subtree"
+      }
+
+      testTask "provideFrom works across task suspension" {
+        let inner : Eff<int, unit, {| UserId: int |}> =
+          eff {
+            let! baseValue = Eff.ofTask (fun () -> task { return 1 })
+            let! userId = Eff.read (fun (env: {| UserId: int |}) -> env.UserId)
+            return baseValue + userId
+          }
+
+        let! value =
+          inner
+          |> Eff.provideFrom (fun (env: {| UserId: int; Name: string |}) ->
+            {| UserId = env.UserId |})
+          |> Eff.runTask {| UserId = 41; Name = "Victor" |}
+
+        Expect.equal value (Exit.Ok 42) "projected env should survive suspension"
+      }
+
+      testTask "provideFrom preserves inner managed errors" {
+        let inner : Eff<int, string, {| UserId: int |}> = Err "boom"
+
+        let! value =
+          inner
+          |> Eff.provideFrom (fun (env: {| UserId: int; Name: string |}) ->
+            {| UserId = env.UserId |})
+          |> Eff.runTask {| UserId = 41; Name = "Victor" |}
+
+        Expect.equal value (Exit.Err "boom") "inner managed errors should flow out"
+      }
+
+      testTask "provideFrom preserves inner defects" {
+        let inner : Eff<int, unit, {| UserId: int |}> =
+          Eff.thunk (fun () -> failwith "boom")
+
+        let! value =
+          inner
+          |> Eff.provideFrom (fun (env: {| UserId: int; Name: string |}) ->
+            {| UserId = env.UserId |})
+          |> Eff.runTask {| UserId = 41; Name = "Victor" |}
+
+        let err: exn = Exit.ex value
+        Expect.equal err.Message "boom" "inner defects should flow out"
+      }
+
+      testTask "provideFrom runs inner defer" {
+        let mutable cleaned = false
+
+        let inner : Eff<int, unit, {| UserId: int |}> =
+          Eff.read (fun (env: {| UserId: int |}) -> env.UserId)
+          |> Eff.defer (Eff.thunk (fun () -> cleaned <- true))
+
+        let! value =
+          inner
+          |> Eff.provideFrom (fun (env: {| UserId: int; Name: string |}) ->
+            {| UserId = env.UserId |})
+          |> Eff.runTask {| UserId = 41; Name = "Victor" |}
+
+        Expect.equal value (Exit.Ok 41) "inner value should be preserved"
+        Expect.isTrue cleaned "inner defer should run"
+      }
+
+      testTask "provideFrom runs inner bracket release" {
+        let events = ResizeArray<string>()
+
+        let inner : Eff<int, unit, {| UserId: int |}> =
+          Eff.bracket
+            (Eff.read (fun (env: {| UserId: int |}) ->
+              events.Add $"acquire {env.UserId}"
+              env.UserId))
+            (fun resource ->
+              Eff.thunk (fun () -> events.Add $"release {resource}"))
+            (fun resource ->
+              Eff.thunk (fun () ->
+                events.Add $"use {resource}"
+                resource + 1))
+
+        let! value =
+          inner
+          |> Eff.provideFrom (fun (env: {| UserId: int; Name: string |}) ->
+            {| UserId = env.UserId |})
+          |> Eff.runTask {| UserId = 41; Name = "Victor" |}
+
+        Expect.equal value (Exit.Ok 42) "inner bracket result should be preserved"
+
+        Expect.sequenceEqual
+          events
+          [ "acquire 41"; "use 41"; "release 41" ]
+          "inner bracket should still release"
+      }
+
       testTask "full usage" {
         let userId =
           Eff.read (fun (e: {| UserId: int; Name: string |}) -> e.UserId)

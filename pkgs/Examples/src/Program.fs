@@ -17,3 +17,16 @@ let x () = eff {
 let y () =
   readFile "bla"
   |> Eff.bind (fun contents -> contents |> parseFile |> Eff.ofResultWith exn)
+
+[<Interface>]
+type ILogger =
+  abstract Debug: string -> unit
+  abstract Error: string -> unit
+
+[<Interface>]
+type ELogger =
+  abstract Logger: ILogger
+
+module ELogger =
+  let debug (env: #ELogger) fmt = env.Logger.Debug fmt
+  let error (env: #ELogger) fmt = env.Logger.Error fmt

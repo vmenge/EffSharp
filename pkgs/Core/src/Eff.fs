@@ -21,7 +21,19 @@ and [<Struct>] private BoxedExit =
 and [<Struct>] private StepResult<'env> =
   | Continue of beff: BoxedEff<'env> * fr: Frame<'env> list
   | Done of bexit: BoxedExit
-  | Await of tsk: Task<obj> * resfn: (Result<obj, exn> -> StepResult<'env>)
+  | Await of tsk: Task<obj> * awfn: (Result<obj, exn> -> StepResult<'env>)
+  | Switch of machine: Machine * swfn: (BoxedExit -> StepResult<'env>)
+
+and [<AbstractClass>] private Machine() =
+  abstract Poll: unit -> MachinePoll
+
+and [<Struct>] private MachinePoll =
+  | MachineDone of bexit: BoxedExit
+  | MachineAwait of tsk: Task<obj> * resfn: (Result<obj, exn> -> Machine)
+  | MachineSwitch of machine: Machine * resume: MachineResume
+
+and [<AbstractClass>] private MachineResume() =
+  abstract Resume: BoxedExit -> Machine
 
 and [<AbstractClass>] private BoxedEff<'env>() =
   abstract StepInto: Stepper<'env> * Frame<'env> list -> StepResult<'env>
@@ -37,18 +49,63 @@ and [<AbstractClass>] private Frame<'env>() =
   abstract HandleExn: exn * Frame<'env> list -> UnwindAction<'env>
 
 and private Stepper<'env> =
+  abstract Env: 'env
+  abstract Project<'inner>: ('env -> 'inner) -> Stepper<'inner>
   abstract Step<'t, 'e> :
     Eff<'t, 'e, 'env> -> Frame<'env> list -> StepResult<'env>
+  abstract Unwind: BoxedExit -> Frame<'env> list -> StepResult<'env>
 
 and [<AbstractClass>] Node<'t, 'e, 'env>() = class end
 
 and private INodeRuntime<'env> =
-  abstract Enter: Frame<'env> list -> StepResult<'env>
+  abstract Enter: Stepper<'env> * Frame<'env> list -> StepResult<'env>
 
 and private BoxedEff<'t, 'e, 'env>(eff: Eff<'t, 'e, 'env>) =
   inherit BoxedEff<'env>()
   member _.Eff = eff
   override _.StepInto(stepper, frames) = stepper.Step eff frames
+
+and private TypedMachine<'env>(stepper: Stepper<'env>, initial: StepResult<'env>) =
+  inherit Machine()
+
+  let mutable current = initial
+
+  override _.Poll() =
+    let mutable result = ValueNone
+    let mutable finished = false
+
+    while not finished do
+      match current with
+      | Continue(nextEff, nextFrames) ->
+        current <- nextEff.StepInto(stepper, nextFrames)
+      | Done value ->
+        result <- ValueSome(MachineDone value)
+        finished <- true
+      | Await(taskObj, cont) ->
+        result <-
+          ValueSome(
+            MachineAwait(taskObj, fun taskResult ->
+              TypedMachine<'env>(stepper, cont taskResult) :> Machine)
+          )
+
+        finished <- true
+      | Switch(machine, cont) ->
+        result <-
+          ValueSome(
+            MachineSwitch(machine, TypedMachineResume<'env>(stepper, cont))
+          )
+
+        finished <- true
+
+    match result with
+    | ValueSome poll -> poll
+    | ValueNone -> failwith "machine poll exited without a result"
+
+and private TypedMachineResume<'env>
+  (stepper: Stepper<'env>, cont: BoxedExit -> StepResult<'env>) =
+  inherit MachineResume()
+
+  override _.Resume(exit) = TypedMachine<'env>(stepper, cont exit) :> Machine
 
 and private MapFrame<'src, 't, 'e, 'env>(mapper: 'src -> 't) =
   inherit Frame<'env>()
@@ -215,7 +272,7 @@ and private Map<'src, 't, 'e, 'env>
   member _.Mapper = mapper
 
   interface INodeRuntime<'env> with
-    member _.Enter(frames) =
+    member _.Enter(_, frames) =
       Continue(
         (BoxedEff<'src, 'e, 'env>(source) :> BoxedEff<'env>),
         (MapFrame<'src, 't, 'e, 'env>(mapper) :> Frame<'env>) :: frames
@@ -228,7 +285,7 @@ and private FlatMap<'src, 't, 'e, 'env>
   member _.Cont = cont
 
   interface INodeRuntime<'env> with
-    member _.Enter(frames) =
+    member _.Enter(_, frames) =
       Continue(
         (BoxedEff<'src, 'e, 'env>(source) :> BoxedEff<'env>),
         (FlatMapFrame<'src, 't, 'e, 'env>(cont) :> Frame<'env>) :: frames
@@ -241,7 +298,7 @@ and private MapErr<'t, 'e1, 'e2, 'env>
   member _.Mapper = mapper
 
   interface INodeRuntime<'env> with
-    member _.Enter(frames) =
+    member _.Enter(_, frames) =
       Continue(
         (BoxedEff<'t, 'e1, 'env>(body) :> BoxedEff<'env>),
         (MapErrFrame<'e1, 'e2, 'env>(mapper) :> Frame<'env>) :: frames
@@ -254,7 +311,7 @@ and private FlatMapErr<'t, 'e, 'env>
   member _.Handler = handler
 
   interface INodeRuntime<'env> with
-    member _.Enter(frames) =
+    member _.Enter(_, frames) =
       Continue(
         (BoxedEff<'t, 'e, 'env>(body) :> BoxedEff<'env>),
         (FlatMapErrFrame<'t, 'e, 'env>(handler) :> Frame<'env>) :: frames
@@ -265,7 +322,7 @@ and private FlatMapExn<'t, 'e, 'env>
   inherit Node<'t, 'e, 'env>()
 
   interface INodeRuntime<'env> with
-    member _.Enter(frames) =
+    member _.Enter(_, frames) =
       Continue(
         (BoxedEff<'t, 'e, 'env>(body) :> BoxedEff<'env>),
         (FlatMapExnFrame<'t, 'e, 'env>(handler) :> Frame<'env>) :: frames
@@ -278,7 +335,7 @@ and private Defer<'t, 'e, 'env>
   member _.Cleanup = cleanup
 
   interface INodeRuntime<'env> with
-    member _.Enter(frames) =
+    member _.Enter(_, frames) =
       Continue(
         (BoxedEff<'t, 'e, 'env>(body) :> BoxedEff<'env>),
         (DeferFrame<'e, 'env>(cleanup) :> Frame<'env>) :: frames
@@ -293,12 +350,25 @@ and private Bracket<'r, 't, 'e, 'env>
   inherit Node<'t, 'e, 'env>()
 
   interface INodeRuntime<'env> with
-    member _.Enter(frames) =
+    member _.Enter(_, frames) =
       Continue(
         (BoxedEff<'r, 'e, 'env>(acquire) :> BoxedEff<'env>),
         (BracketAcquireFrame<'r, 't, 'e, 'env>(usefn, release) :> Frame<'env>)
         :: frames
       )
+
+and private ProvideFrom<'t, 'e, 'envOuter, 'envInner>
+  (project: 'envOuter -> 'envInner, body: Eff<'t, 'e, 'envInner>) =
+  inherit Node<'t, 'e, 'envOuter>()
+
+  interface INodeRuntime<'envOuter> with
+    member _.Enter(stepper, frames) =
+      let childStepper = stepper.Project project
+      let childMachine =
+        TypedMachine<'envInner>(childStepper, childStepper.Step body [])
+        :> Machine
+
+      Switch(childMachine, fun exit -> stepper.Unwind exit frames)
 
 [<RequireQualifiedAccess>]
 type Exit<'t, 'e> =
@@ -455,6 +525,9 @@ module Eff =
     |> bind ofResult
 
   let bracket acquire release usefn = Eff.Node(Bracket(acquire, usefn, release))
+  let provideFrom project eff = Eff.Node(ProvideFrom(project, eff))
+  let provide env eff = provideFrom (fun () -> env) eff
+  let flatten eff = bind id eff
 
   let filterOr
     (pred: 't -> bool)
@@ -554,7 +627,6 @@ module Eff =
 
   let private stepEff<'t, 'e, 'env>
     (stepper: Stepper<'env>)
-    (env: 'env)
     (eff: Eff<'t, 'e, 'env>)
     (frames: Frame<'env> list)
     : StepResult<'env> =
@@ -612,7 +684,7 @@ module Eff =
       | Eff.Read read ->
         try
           result <-
-            ValueSome(unwind stepper (BoxedOk(box (read env))) currentFrames)
+            ValueSome(unwind stepper (BoxedOk(box (read stepper.Env))) currentFrames)
         with ex ->
           result <- ValueSome(unwind stepper (BoxedExn ex) currentFrames)
 
@@ -621,7 +693,7 @@ module Eff =
         result <-
           ValueSome(
             match box node with
-            | :? INodeRuntime<'env> as runtime -> runtime.Enter currentFrames
+            | :? INodeRuntime<'env> as runtime -> runtime.Enter(stepper, currentFrames)
             | _ -> failwith "unknown node"
           )
 
@@ -631,30 +703,32 @@ module Eff =
     | ValueSome step -> step
     | ValueNone -> failwith "step loop exited without a result"
 
-  let private runTaskLoop
-    (env: 'env)
-    (stepper: Stepper<'env>)
-    (eff: BoxedEff<'env>)
-    (frames: Frame<'env> list)
-    : Task<BoxedExit> =
+  let private runTaskLoop (machine: Machine) : Task<BoxedExit> =
     task {
-      let mutable current = eff.StepInto(stepper, frames)
+      let mutable current = machine
+      let mutable resumes: MachineResume list = []
       let mutable exit = ValueNone
       let mutable finished = false
 
       while not finished do
-        match current with
-        | Continue(nextEff, nextFrames) ->
-          current <- nextEff.StepInto(stepper, nextFrames)
-        | Done value ->
-          exit <- ValueSome value
-          finished <- true
-        | Await(taskObj, cont) ->
+        match current.Poll() with
+        | MachineDone value ->
+          match resumes with
+          | resume :: rest ->
+            resumes <- rest
+            current <- resume.Resume value
+          | [] ->
+            exit <- ValueSome value
+            finished <- true
+        | MachineAwait(taskObj, cont) ->
           try
             let! value = taskObj
             current <- cont (Ok value)
           with ex ->
             current <- cont (Error ex)
+        | MachineSwitch(machine, resume) ->
+          resumes <- resume :: resumes
+          current <- machine
 
       return
         match exit with
@@ -662,14 +736,23 @@ module Eff =
         | ValueNone -> failwith "run loop exited without a result"
     }
 
+  type private RuntimeStepper<'env>(env: 'env) as this =
+    interface Stepper<'env> with
+      member _.Env = env
+
+      member _.Project(project: 'env -> 'inner) : Stepper<'inner> =
+        RuntimeStepper<'inner>(project env) :> Stepper<'inner>
+
+      member _.Step inner frames = stepEff (this :> Stepper<'env>) inner frames
+
+      member _.Unwind exit frames = unwind (this :> Stepper<'env>) exit frames
+
   let runTask (env: 'env) (eff: Eff<'t, 'e, 'env>) : Task<Exit<'t, 'e>> =
-    let rec stepper =
-      { new Stepper<'env> with
-          member _.Step (inner) frames = stepEff stepper env inner frames
-      }
+    let stepper = RuntimeStepper<'env>(env) :> Stepper<'env>
+    let machine = TypedMachine<'env>(stepper, stepper.Step eff []) :> Machine
 
     task {
-      let! exit = runTaskLoop env stepper (boxedEff eff) []
+      let! exit = runTaskLoop machine
 
       match exit with
       | BoxedOk value -> return Exit.Ok(unbox<'t> value)
