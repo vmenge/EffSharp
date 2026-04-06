@@ -47,6 +47,10 @@ module DiagnosticsE2E =
         do! assertGeneratorDiagnostic "InvalidAttributeTarget" [ "EFFGEN001"; "[<Effect>] can only be applied to interfaces"; "BadRecord" ]
       }
 
+      testTask "attribute on abstract class target fails with the interface-only diagnostic" {
+        do! assertGeneratorDiagnostic "InvalidAbstractClassTarget" [ "EFFGEN001"; "[<Effect>] can only be applied to interfaces"; "BadService" ]
+      }
+
       testTask "unsupported interface member kind fails with a precise diagnostic" {
         do! assertGeneratorDiagnostic "UnsupportedMemberKind" [ "EFFGEN002"; "Only abstract methods are supported"; "Name" ]
       }

@@ -48,19 +48,35 @@ module Discovery =
       source.Substring(startOffset, endOffset - startOffset).Trim()
 
   let private hasEffectAttribute (attributes: SynAttributeList list) =
-    let isEffectName (name: string) =
-      name = "Effect" || name = "EffectAttribute" || name.EndsWith(".Effect") || name.EndsWith(".EffectAttribute")
+    let hasAttributeName expectedShortName expectedAttributeName (name: string) =
+      name = expectedShortName
+      || name = expectedAttributeName
+      || name.EndsWith($".{expectedShortName}", StringComparison.Ordinal)
+      || name.EndsWith($".{expectedAttributeName}", StringComparison.Ordinal)
 
     attributes
     |> List.collect (fun (attributeList: SynAttributeList) -> attributeList.Attributes)
     |> List.exists (fun attribute ->
       attribute.TypeName
       |> joinSynLongIdent
-      |> isEffectName)
+      |> hasAttributeName "Effect" "EffectAttribute")
 
-  let private isInterfaceRepresentation representation =
+  let private hasAbstractClassAttribute (attributes: SynAttributeList list) =
+    attributes
+    |> List.collect (fun (attributeList: SynAttributeList) -> attributeList.Attributes)
+    |> List.exists (fun attribute ->
+      attribute.TypeName
+      |> joinSynLongIdent
+      |> fun name ->
+        name = "AbstractClass"
+        || name = "AbstractClassAttribute"
+        || name.EndsWith(".AbstractClass", StringComparison.Ordinal)
+        || name.EndsWith(".AbstractClassAttribute", StringComparison.Ordinal))
+
+  let private isInterfaceRepresentation attributes representation =
     match representation with
     | SynTypeDefnRepr.ObjectModel(SynTypeDefnKind.Interface, _, _) -> true
+    | _ when hasAbstractClassAttribute attributes -> false
     | SynTypeDefnRepr.ObjectModel(_, members, _) ->
         members
         |> List.forall (function
@@ -169,7 +185,7 @@ module Discovery =
         let typeName = longId |> List.last
 
         match representation with
-        | SynTypeDefnRepr.ObjectModel(_, members, _) when isInterfaceRepresentation representation ->
+        | SynTypeDefnRepr.ObjectModel(_, members, _) when isInterfaceRepresentation attributes representation ->
             if members.IsEmpty then
               {
                 emptyResult with

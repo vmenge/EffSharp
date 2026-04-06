@@ -2,6 +2,7 @@ namespace EffFs.EffectGen
 
 open System
 open System.IO
+open System.Text
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 
@@ -22,6 +23,10 @@ type GenerateEffectFilesTask() =
 
   [<Required>]
   member val CompileItems : ITaskItem array = [||] with get, set
+
+  member val ParseCommandLineArgs : ITaskItem array = [||] with get, set
+
+  member val OtherFlags = "" with get, set
 
   [<Output>]
   member val GeneratedFiles : ITaskItem array = [||] with get, set
@@ -82,13 +87,45 @@ type GenerateEffectFilesTask() =
 
     orderedItems.ToArray()
 
+  member private this.parseCommandLineArgs () =
+    let argsFromItems =
+      this.ParseCommandLineArgs
+      |> Array.map _.ItemSpec
+      |> Array.toList
+
+    let argsFromOtherFlags =
+      let tokens = ResizeArray<string>()
+      let current = StringBuilder()
+      let mutable inQuotes = false
+
+      let flushCurrent () =
+        if current.Length > 0 then
+          tokens.Add(current.ToString())
+          current.Clear() |> ignore
+
+      for ch in this.OtherFlags do
+        match ch with
+        | '"' ->
+            inQuotes <- not inQuotes
+        | c when Char.IsWhiteSpace(c) && not inQuotes ->
+            flushCurrent ()
+        | c ->
+            current.Append(c) |> ignore
+
+      flushCurrent ()
+      tokens |> Seq.toList
+
+    argsFromItems @ argsFromOtherFlags
+
   override this.Execute() =
     try
       let compileInputs = ProjectInputs.compileInputs this.ProjectDirectory this.CompileItems
       let outputDirectory = ProjectInputs.generatedOutputDirectory this.ProjectDirectory this.IntermediateOutputPath
+      let sourceFiles = compileInputs |> Array.map _.FullPath |> Array.toList
+      let parseCommandLineArgs = this.parseCommandLineArgs ()
       let parsedFiles =
         compileInputs
-        |> Array.map (fun compileInput -> FcsParsing.parseFile compileInput.FullPath)
+        |> Array.map (fun compileInput -> FcsParsing.parseFile sourceFiles parseCommandLineArgs compileInput.FullPath)
 
       let validation = Validation.validateFiles parsedFiles
 

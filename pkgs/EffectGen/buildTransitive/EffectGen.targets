@@ -13,10 +13,20 @@
     Name="EffectGenGenerateSources"
     BeforeTargets="FSharpSourceCodeCompileOrder"
     Condition="'$(EffectGenEnabled)' == 'true' and '$(Language)' == 'F#' and Exists('$(EffectGenTaskAssemblyPath)')">
+    <ItemGroup>
+      <_EffectGenDefine Include="$(DefineConstants)" Condition="'$(DefineConstants)' != ''" />
+      <_EffectGenParseCommandLineArg Include="--targetprofile:$(TargetProfile)" Condition="'$(TargetProfile)' != ''" />
+      <_EffectGenParseCommandLineArg Include="--langversion:$(LangVersion)" Condition="'$(LangVersion)' != ''" />
+      <_EffectGenParseCommandLineArg Include="@(_EffectGenDefine->'--define:%(Identity)')" />
+      <_EffectGenParseCommandLineArg Include="@(DisabledLanguageFeatures->'--disable-language-feature:%(Identity)')" />
+    </ItemGroup>
+
     <GenerateEffectFilesTask
       ProjectDirectory="$(MSBuildProjectDirectory)"
       IntermediateOutputPath="$(IntermediateOutputPath)"
-      CompileItems="@(Compile)">
+      CompileItems="@(Compile)"
+      ParseCommandLineArgs="@(_EffectGenParseCommandLineArg)"
+      OtherFlags="$(OtherFlags)">
       <Output TaskParameter="GeneratedFiles" ItemName="FileWrites" />
       <Output TaskParameter="OrderedCompileItems" ItemName="_EffectGenOrderedCompile" />
     </GenerateEffectFilesTask>

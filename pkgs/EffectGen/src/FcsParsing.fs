@@ -13,11 +13,12 @@ type ParsedSourceFile = {
 
 module FcsParsing =
   let private checker = lazy (FSharpChecker.Create())
+  let defaultCommandLineArgs = [ "--targetprofile:netcore" ]
 
-  let parseFile (filePath: string) =
+  let parseFile (sourceFiles: string list) (commandLineArgs: string list) (filePath: string) =
     let source = File.ReadAllText(filePath)
     let sourceText = SourceText.ofString source
-    let parsingOptions, _ = checker.Value.GetParsingOptionsFromCommandLineArgs([ filePath ], [ "--targetprofile:netcore" ])
+    let parsingOptions, _ = checker.Value.GetParsingOptionsFromCommandLineArgs(sourceFiles, commandLineArgs)
     let results = checker.Value.ParseFile(filePath, sourceText, parsingOptions) |> Async.RunSynchronously
 
     {

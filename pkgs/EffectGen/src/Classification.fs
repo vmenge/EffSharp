@@ -3,10 +3,13 @@ namespace EffFs.EffectGen
 open FSharp.Compiler.Syntax
 
 module Classification =
+  let private terminalTypeName synType =
+    match synType with
+    | SynType.LongIdent(SynLongIdent(idents, _, _)) -> idents |> List.tryLast |> Option.map _.idText
+    | _ -> None
+
   let private isNamedType expected typeName =
-    match typeName with
-    | SynType.LongIdent(SynLongIdent([ ident ], _, _)) -> ident.idText = expected
-    | _ -> false
+    terminalTypeName typeName = Some expected
 
   let private resultTypeArguments renderType synType =
     match synType with
@@ -41,7 +44,6 @@ module Classification =
     | SynType.App(typeName, _, _, _, _, _, _)
       when isNamedType "Eff" typeName ->
         ReturnShape.Unsupported(renderType synType)
-    | SynType.LongIdent(SynLongIdent([ ident ], _, _))
-      when ident.idText = "Eff" ->
+    | SynType.LongIdent _ when isNamedType "Eff" synType ->
         ReturnShape.Unsupported(renderType synType)
     | _ -> ReturnShape.Plain(renderType synType)
