@@ -368,6 +368,60 @@ module Eff =
           "defer should run after explicit async exception capture"
       }
 
+      testTask "tapErr runs side effect and preserves the original error" {
+        let mutable seen = ""
+
+        let! value =
+          Err "boom"
+          |> Eff.tapErr (fun err ->
+            Eff.thunk (fun () -> seen <- $"logged: {err}")
+          )
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Err "boom") "should preserve the original error"
+        Expect.equal seen "logged: boom" "should run the tapErr side effect"
+      }
+
+      testTask "tapErr does not run on success" {
+        let mutable called = false
+
+        let! value =
+          Pure 42
+          |> Eff.tapErr (fun _ ->
+            Eff.thunk (fun () -> called <- true)
+          )
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Ok 42) "should preserve the successful result"
+        Expect.isFalse called "tapErr should not run on success"
+      }
+
+      testTask "tapErr handler error overrides the original error" {
+        let! value =
+          Err "boom"
+          |> Eff.tapErr (fun _ -> Err "handler failed")
+          |> Eff.runTask ()
+
+        Expect.equal
+          value
+          (Exit.Err "handler failed")
+          "handler errors should override the original error"
+      }
+
+      testTask "tapErr handler defect overrides the original error" {
+        let! value =
+          Err "boom"
+          |> Eff.tapErr (fun _ -> Eff.thunk (fun () -> failwith "tap failed"))
+          |> Eff.runTask ()
+
+        let err: exn = Exit.ex value
+
+        Expect.equal
+          err.Message
+          "tap failed"
+          "handler defects should override the original error"
+      }
+
       testTask "bracket releases after success" {
         let events = ResizeArray<string>()
 

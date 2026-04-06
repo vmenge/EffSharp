@@ -427,12 +427,6 @@ module Eff =
 
   let bracket acquire release usefn = Eff.Node(Bracket(acquire, usefn, release))
 
-  let tap
-    (f: 't -> Eff<'k, 'e, 'env>)
-    (ef: Eff<'t, 'e, 'env>)
-    : Eff<'t, 'e, 'env> =
-    ef |> bind (fun t -> f t |> map (fun _ -> t))
-
   let filterOr
     (pred: 't -> bool)
     (orFn: 't -> Eff<'t, 'e, 'env>)
@@ -451,6 +445,18 @@ module Eff =
     (eff: Eff<'t, 'e, 'env>)
     : Eff<'t, 'e, 'env> =
     orElseWith (fun _ -> fallback) eff
+
+  let tap
+    (f: 't -> Eff<'k, 'e, 'env>)
+    (ef: Eff<'t, 'e, 'env>)
+    : Eff<'t, 'e, 'env> =
+    ef |> bind (fun t -> f t |> map (fun _ -> t))
+
+  let tapErr
+    (f: 'e -> Eff<'k, 'e, 'env>)
+    (ef: Eff<'t, 'e, 'env>)
+    : Eff<'t, 'e, 'env> =
+    ef |> orElseWith (fun e -> f e |> bind (fun _ -> Err e))
 
   let orRaise eff : Eff<_, unit, _> =
     eff |> orElseWith (fun e -> Thunk(fun () -> raise (Report.make e)))
