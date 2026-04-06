@@ -4,6 +4,8 @@ open System
 open System.Collections.Generic
 open System.Diagnostics
 open System.IO
+open System.Reflection
+open System.Runtime.Loader
 open System.Threading.Tasks
 
 module Harness =
@@ -56,8 +58,39 @@ module Harness =
     let projectName = Path.GetFileNameWithoutExtension(projectPath)
     Path.Combine(projectDirectory, "bin", "Debug", "net10.0", $"{projectName}.dll")
 
+  let private restoreKey (projectPath: string) (extraArgs: string list) =
+    projectPath + "\u001f" + String.concat "\u001f" extraArgs
+
+  let private projectRestores = Dictionary<string, Task>()
+  let private projectRestoresLock = obj()
   let private prerequisiteBuilds = Dictionary<string, Task>()
   let private prerequisiteBuildsLock = obj()
+
+  let private ensureProjectRestore (projectPath: string) (extraArgs: string list) = task {
+    let key = restoreKey projectPath extraArgs
+    let restoreTask =
+      lock projectRestoresLock (fun () ->
+        match projectRestores.TryGetValue(key) with
+        | true, existing -> existing
+        | false, _ ->
+            let started =
+              task {
+                let extra =
+                  match extraArgs with
+                  | [] -> ""
+                  | args -> " " + String.concat " " args
+
+                let! result = runDotnet None $"restore \"{projectPath}\" --nologo -m:1{extra}"
+
+                if result.ExitCode <> 0 then
+                  failwith $"failed to restore project {projectPath}{System.Environment.NewLine}{result.Output}"
+              } :> Task
+
+            projectRestores[key] <- started
+            started)
+
+    do! restoreTask
+  }
 
   let private ensureProjectBuild (projectPath: string) = task {
     let buildTask =
@@ -80,44 +113,75 @@ module Harness =
   }
 
   let buildProject (projectPath: string) : Task<BuildResult> = task {
-    do! ensureProjectBuild coreProject
-    do! ensureProjectBuild effectGenProject
-    return! runDotnet None $"build \"{projectPath}\" --nologo -m:1 -t:Rebuild"
+    do! ensureProjectRestore projectPath []
+    return! runDotnet None $"build \"{projectPath}\" --nologo -m:1 --no-restore"
   }
 
   let buildProjectWithArgs (projectPath: string) (extraArgs: string list) : Task<BuildResult> = task {
-    do! ensureProjectBuild coreProject
-    do! ensureProjectBuild effectGenProject
-
     let extra =
       match extraArgs with
       | [] -> ""
       | args -> " " + String.concat " " args
 
-    return! runDotnet None $"build \"{projectPath}\" --nologo -m:1 -t:Rebuild{extra}"
+    do! ensureProjectRestore projectPath extraArgs
+    return! runDotnet None $"build \"{projectPath}\" --nologo -m:1 --no-restore{extra}"
   }
 
   let runBuiltProject (projectPath: string) : Task<BuildResult> =
     runDotnet None $"\"{builtDllPath projectPath}\""
 
-  let runBuiltExpression (projectPath: string) (expression: string) : Task<BuildResult> = task {
-    let scriptPath = Path.Combine(Path.GetTempPath(), $"effectgen-run-{Guid.NewGuid():N}.fsx")
+  type private BuiltAssemblyLoadContext(assemblyPath: string) =
+    inherit AssemblyLoadContext(isCollectible = true)
 
-    try
-      File.WriteAllText(
-        scriptPath,
-        "#r @\"" + builtDllPath projectPath + "\"" + System.Environment.NewLine
-        + "printfn \"%s\" (" + expression + ")" + System.Environment.NewLine
-      )
+    let resolver = AssemblyDependencyResolver(assemblyPath)
 
-      return! runDotnet None $"fsi --nologo --exec \"{scriptPath}\""
-    finally
-      if File.Exists(scriptPath) then
-        File.Delete(scriptPath)
+    override this.Load(assemblyName: AssemblyName) =
+      match resolver.ResolveAssemblyToPath(assemblyName) with
+      | null -> null
+      | path -> this.LoadFromAssemblyPath(path)
+
+  let runBuiltFunction (projectPath: string) (typeName: string) (methodName: string) : Task<BuildResult> = task {
+    let assemblyPath = builtDllPath projectPath
+    let loadContext = new BuiltAssemblyLoadContext(assemblyPath)
+
+    let result =
+      try
+        let assembly = loadContext.LoadFromAssemblyPath(assemblyPath)
+        let declaringType = assembly.GetType(typeName, throwOnError = true)
+        let methodInfo = declaringType.GetMethod(methodName, BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Static)
+
+        if isNull methodInfo then
+          {
+            ExitCode = 1
+            Output = $"method {typeName}.{methodName} was not found in {assemblyPath}"
+          }
+        else
+          let value = methodInfo.Invoke(null, [||])
+
+          {
+            ExitCode = 0
+            Output =
+              match value with
+              | null -> ""
+              | output -> string output
+          }
+      with error ->
+        let unwrapped =
+          match error with
+          | :? TargetInvocationException as invocationError when not (isNull invocationError.InnerException) ->
+              invocationError.InnerException
+          | _ -> error
+
+        {
+          ExitCode = 1
+          Output = unwrapped.ToString()
+        }
+
+    loadContext.Unload()
+    return result
   }
 
   let packProject (projectPath: string) (outputDirectory: string) : Task<BuildResult> = task {
-    do! ensureProjectBuild coreProject
     do! ensureProjectBuild effectGenProject
-    return! runDotnet None $"pack \"{projectPath}\" --nologo --no-build -p:Configuration=Debug -o \"{outputDirectory}\""
+    return! runDotnet None $"pack \"{projectPath}\" --nologo --no-build --no-restore -p:Configuration=Debug -o \"{outputDirectory}\""
   }

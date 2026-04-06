@@ -64,7 +64,7 @@ module ExampleE2E =
         let! buildResult = builtExample.Value
         Expect.equal buildResult.ExitCode 0 $"example project should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
 
-        let! runResult = runBuiltExpression exampleProject "EffFs.Examples.Program.run ()"
+        let! runResult = runBuiltFunction exampleProject "EffFs.Examples.Program" "run"
         Expect.equal runResult.ExitCode 0 $"example project should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
         Expect.stringContains runResult.Output "Hello, EffectGen." "the example should print the greeting produced through the generated wrapper"
       }

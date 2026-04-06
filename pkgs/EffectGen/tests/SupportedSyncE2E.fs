@@ -72,7 +72,7 @@ module SupportedSyncE2E =
         let! buildResult = builtFixture.Value
         Expect.equal buildResult.ExitCode 0 $"fixture {fixtureName} should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
 
-        let! runResult = runBuiltExpression fixtureProject "SupportedSyncRed.Program.run ()"
+        let! runResult = runBuiltFunction fixtureProject "SupportedSyncRed.Program" "run"
         Expect.equal runResult.ExitCode 0 $"fixture {fixtureName} should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
         Expect.stringContains runResult.Output "supported-sync-runtime-ok" "runtime verification should exercise the generated sync wrappers"
       }

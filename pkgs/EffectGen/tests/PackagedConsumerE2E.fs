@@ -52,7 +52,7 @@ module PackagedConsumerE2E =
         Expect.equal buildResult.ExitCode 0 $"fixture {fixtureName} should build successfully against the packed EffectGen package. Output:{System.Environment.NewLine}{buildResult.Output}"
         Expect.isTrue (Directory.Exists(generatedDirectory)) $"fixture {fixtureName} should emit generated files into {generatedDirectory}"
 
-        let! runResult = runBuiltExpression fixtureProject "PackagedConsumer.Program.run ()"
+        let! runResult = runBuiltFunction fixtureProject "PackagedConsumer.Program" "run"
         Expect.equal runResult.ExitCode 0 $"fixture {fixtureName} should run successfully after building against the packed EffectGen package. Output:{System.Environment.NewLine}{runResult.Output}"
         Expect.stringContains runResult.Output "Hello, packaged consumer." "the packaged consumer should execute the generated wrapper at runtime"
       }

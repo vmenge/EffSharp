@@ -65,7 +65,7 @@ module SupportedAsyncE2E =
         let! buildResult = builtFixture.Value
         Expect.equal buildResult.ExitCode 0 $"fixture {fixtureName} should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
 
-        let! runResult = runBuiltExpression fixtureProject "SupportedAsyncRed.Program.run ()"
+        let! runResult = runBuiltFunction fixtureProject "SupportedAsyncRed.Program" "run"
         Expect.equal runResult.ExitCode 0 $"fixture {fixtureName} should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
         Expect.stringContains runResult.Output "supported-async-runtime-ok" "runtime verification should exercise the generated async wrappers"
       }
