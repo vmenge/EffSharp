@@ -9,7 +9,7 @@ module ValidationTests =
     Path.Combine(__SOURCE_DIRECTORY__, "Fixtures", fixtureName, "Interfaces.fs")
 
   let private diagnosticsFor fixtureName =
-    [ fixturePath fixtureName |> FcsParsing.parseFile ]
+    [| fixturePath fixtureName |> FcsParsing.parseFile |]
     |> Validation.validateFiles
     |> _.Diagnostics
 

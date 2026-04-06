@@ -1,11 +1,14 @@
 namespace EffFs.EffectGen
 
+open System
 open FSharp.Compiler.Syntax
+open FSharp.Compiler.Text
 
 module Validation =
-  type private DefinedTypeKind =
-    | Interface
-    | NonInterface
+  type private EnvironmentContract = {
+    Names: string list
+    Properties: (string * string) list
+  }
 
   let private emptyResult = {
     Interfaces = []
@@ -23,23 +26,36 @@ module Validation =
   let private joinLongIdent (idents: Ident list) =
     idents |> List.map _.idText |> String.concat "."
 
+  let private buildLineOffsets (source: string) =
+    let offsets = ResizeArray<int>()
+    offsets.Add(0)
+
+    for index in 0 .. source.Length - 1 do
+      if source[index] = '\n' then
+        offsets.Add(index + 1)
+
+    offsets.ToArray()
+
+  let private textInRange (source: string) =
+    let lineOffsets = buildLineOffsets source
+
+    fun (targetRange: range) ->
+      let startOffset = lineOffsets[targetRange.StartLine - 1] + targetRange.StartColumn
+      let endOffset = lineOffsets[targetRange.EndLine - 1] + targetRange.EndColumn
+      source.Substring(startOffset, endOffset - startOffset).Trim()
+
   let private normalizeEnvironmentType (environmentType: string) =
-    if environmentType.StartsWith("#") then
+    if environmentType.StartsWith("#", StringComparison.Ordinal) then
       environmentType.Substring(1)
     else
       environmentType
 
-  let private isInterfaceRepresentation representation =
-    match representation with
-    | SynTypeDefnRepr.ObjectModel(SynTypeDefnKind.Interface, _, _) -> true
-    | SynTypeDefnRepr.ObjectModel(_, members, _) ->
-        members
-        |> List.forall (function
-          | SynMemberDefn.AbstractSlot _ -> true
-          | _ -> false)
-    | _ -> false
+  let private matchesTypeName (candidate: string) (typeName: string) =
+    typeName = candidate || typeName.EndsWith($".{candidate}", StringComparison.Ordinal)
 
-  let private discoverDefinedTypes (parsedFile: ParsedSourceFile) =
+  let private discoverEnvironmentContracts (parsedFile: ParsedSourceFile) =
+    let renderType = textInRange parsedFile.Source
+
     match parsedFile.ParseTree with
     | ParsedInput.ImplFile(ParsedImplFileInput(_, _, _, _, modules, _, _, _)) ->
         modules
@@ -50,54 +66,85 @@ module Validation =
                 if longId.IsEmpty then
                   None
                 else
-                  Some (joinLongIdent longId)
+                  Some(joinLongIdent longId)
 
               declarations
               |> List.collect (fun declaration ->
                 match declaration with
                 | SynModuleDecl.Types(typeDefns, _) ->
                     typeDefns
-                    |> List.collect (fun (SynTypeDefn(SynComponentInfo(_, _, _, typeName, _, _, _, _), representation, _, _, _, _)) ->
-                      let serviceName = typeName |> List.last |> _.idText
-                      let kind =
-                        if isInterfaceRepresentation representation then Interface else NonInterface
+                    |> List.choose (fun typeDefn ->
+                      match typeDefn with
+                      | SynTypeDefn(SynComponentInfo(_, _, _, typeName, _, _, _, _), SynTypeDefnRepr.ObjectModel(_, members, _), _, _, _, _) ->
+                          let serviceName = typeName |> List.last |> _.idText
 
-                      let fullyQualifiedName =
-                        namespaceName
-                        |> Option.map (fun ns -> $"{ns}.{serviceName}")
+                          let properties =
+                            members
+                            |> List.choose (fun memberDefn ->
+                              match memberDefn with
+                              | SynMemberDefn.AbstractSlot(SynValSig(_, SynIdent(ident, _), _, propertyType, _, _, _, _, _, _, _, _), memberFlags, _, _)
+                                when memberFlags.MemberKind = SynMemberKind.PropertyGet ->
+                                  Some(ident.idText, renderType propertyType.Range)
+                              | _ -> None)
 
-                      [
-                        yield serviceName, kind
+                          if properties.IsEmpty then
+                            None
+                          else
+                            let names =
+                              serviceName
+                              :: [
+                                   match namespaceName with
+                                   | Some ns -> $"{ns}.{serviceName}"
+                                   | None -> ()
+                                 ]
 
-                        match fullyQualifiedName with
-                        | Some fullName -> yield fullName, kind
-                        | None -> ()
-                      ])
+                            Some {
+                              Names = names
+                              Properties = properties
+                            }
+                      | _ -> None)
                 | _ -> []))
     | ParsedInput.SigFile _ -> []
 
-  let private adaptationDiagnostics knownTypes effectInterface =
-    effectInterface.Methods
-    |> List.choose (fun methodModel ->
-      match methodModel.ReturnShape with
-      | ReturnShape.Eff(_, _, environmentType)
-        when environmentType <> "unit"
-             && environmentType <> effectInterface.EnvironmentName
-             && environmentType <> $"#{effectInterface.EnvironmentName}" ->
-          let normalizedEnvironment = normalizeEnvironmentType environmentType
+  let private adaptInterface environmentContracts effectInterface =
+    let inheritedEnvironments, diagnostics =
+      (([], []), effectInterface.Methods)
+      ||> List.fold (fun (inheritedAcc, diagnosticsAcc) methodModel ->
+        match methodModel.ReturnShape with
+        | ReturnShape.Eff(_, _, environmentType)
+          when environmentType <> "unit"
+               && environmentType <> effectInterface.EnvironmentName
+               && environmentType <> $"#{effectInterface.EnvironmentName}" ->
+            let normalizedEnvironment = normalizeEnvironmentType environmentType
 
-          match Map.tryFind normalizedEnvironment knownTypes with
-          | Some NonInterface ->
-              Some {
-                Code = "EFFGEN003"
-                Message =
-                  $"[<Effect>] method '{methodModel.SourceName}' has unsupported return shape '{environmentType}' because environment adaptation to '{normalizedEnvironment}' is not mechanically derivable."
-                FilePath = effectInterface.SourceFile
-                Line = methodModel.DeclarationLine
-                Column = methodModel.DeclarationColumn
-              }
-          | _ -> None
-      | _ -> None)
+            let isMechanicallyDerivable =
+              environmentContracts
+              |> List.tryFind (fun contract ->
+                contract.Names |> List.exists (fun name -> matchesTypeName name normalizedEnvironment))
+              |> Option.exists (fun contract -> contract.Properties = [ effectInterface.PropertyName, effectInterface.ServiceName ])
+
+            if isMechanicallyDerivable then
+              inheritedAcc @ [ normalizedEnvironment ], diagnosticsAcc
+            else
+              inheritedAcc,
+              diagnosticsAcc
+              @ [
+                  createDiagnostic
+                    "EFFGEN003"
+                    effectInterface.SourceFile
+                    methodModel.DeclarationLine
+                    methodModel.DeclarationColumn
+                    $"[<Effect>] method '{methodModel.SourceName}' has unsupported return shape '{environmentType}' because environment adaptation to '{normalizedEnvironment}' is not mechanically derivable."
+                ]
+        | _ -> inheritedAcc, diagnosticsAcc)
+
+    if diagnostics.IsEmpty then
+      Ok {
+        effectInterface with
+            InheritedEnvironments = inheritedEnvironments |> List.distinct
+      }
+    else
+      Error diagnostics
 
   let private collisionDiagnostics effectInterfaces =
     effectInterfaces
@@ -120,32 +167,31 @@ module Validation =
             effectInterface.DeclarationColumn
             $"[<Effect>] interface '{effectInterface.ServiceName}' collides with generated names from {conflictingNames}. Generated environment '{environmentName}' and property '{propertyName}' must be unique within a namespace."))
 
-  let validateFiles (parsedFiles: ParsedSourceFile list) =
+  let validateFiles (parsedFiles: ParsedSourceFile array) =
     let discovered =
-      parsedFiles |> List.map Discovery.discoverInterfaces
+      parsedFiles |> Array.map Discovery.discoverInterfaces
 
-    let knownTypes =
+    let environmentContracts =
       parsedFiles
-      |> List.collect discoverDefinedTypes
-      |> Map.ofList
+      |> Array.collect (discoverEnvironmentContracts >> List.toArray)
+      |> Array.toList
 
     let discoveredInterfaces =
       discovered
-      |> List.collect _.Interfaces
+      |> Array.collect (_.Interfaces >> List.toArray)
+      |> Array.toList
 
     let discoveryDiagnostics =
       discovered
-      |> List.collect _.Diagnostics
+      |> Array.collect (_.Diagnostics >> List.toArray)
+      |> Array.toList
 
     let validatedInterfaces, adaptationDiagnostics =
       (([], []), discoveredInterfaces)
       ||> List.fold (fun (interfacesAcc, diagnosticsAcc) effectInterface ->
-        let diagnostics = adaptationDiagnostics knownTypes effectInterface
-
-        if diagnostics.IsEmpty then
-          interfacesAcc @ [ effectInterface ], diagnosticsAcc
-        else
-          interfacesAcc, diagnosticsAcc @ diagnostics)
+        match adaptInterface environmentContracts effectInterface with
+        | Ok validatedInterface -> interfacesAcc @ [ validatedInterface ], diagnosticsAcc
+        | Error diagnostics -> interfacesAcc, diagnosticsAcc @ diagnostics)
 
     let collisions = collisionDiagnostics validatedInterfaces
 

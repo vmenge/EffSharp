@@ -9,16 +9,20 @@ module Harness =
     Output: string
   }
 
-  let buildProject (projectPath: string) : Task<BuildResult> = task {
-    let startInfo = ProcessStartInfo("dotnet", $"build \"{projectPath}\" --nologo")
+  let private runDotnet (workingDirectory: string option) (arguments: string) : Task<BuildResult> = task {
+    let startInfo = ProcessStartInfo("dotnet", arguments)
     startInfo.RedirectStandardOutput <- true
     startInfo.RedirectStandardError <- true
     startInfo.UseShellExecute <- false
 
+    match workingDirectory with
+    | Some directory -> startInfo.WorkingDirectory <- directory
+    | None -> ()
+
     use proc = new Process(StartInfo = startInfo)
 
     if not (proc.Start()) then
-      failwith $"failed to start build for {projectPath}"
+      failwith $"failed to start dotnet {arguments}"
 
     do! proc.WaitForExitAsync()
 
@@ -30,3 +34,9 @@ module Harness =
       Output = stdout + stderr
     }
   }
+
+  let buildProject (projectPath: string) : Task<BuildResult> =
+    runDotnet None $"build \"{projectPath}\" --nologo"
+
+  let packProject (projectPath: string) (outputDirectory: string) : Task<BuildResult> =
+    runDotnet None $"pack \"{projectPath}\" --nologo -o \"{outputDirectory}\""

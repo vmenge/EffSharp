@@ -18,5 +18,6 @@ let main argv =
           SupportedEffProvideFromE2E.tests
           DiagnosticsE2E.tests
           ValidationTests.tests
+          ExampleE2E.tests
         ]
     )

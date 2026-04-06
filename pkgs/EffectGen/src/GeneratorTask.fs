@@ -89,7 +89,6 @@ type GenerateEffectFilesTask() =
       let parsedFiles =
         compileInputs
         |> Array.map (fun compileInput -> FcsParsing.parseFile compileInput.FullPath)
-        |> Array.toList
 
       let validation = Validation.validateFiles parsedFiles
 
