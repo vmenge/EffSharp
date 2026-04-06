@@ -52,11 +52,4 @@ module RedE2E =
   }
 
   let tests =
-    testList "RedE2E" [
-      testTask "supported Eff provideFrom fixture is red because mechanical adaptation is not implemented yet" {
-        do!
-          assertMeaningfulRedFailure
-            "SupportedEffProvideFrom"
-            [ "Unsupported Eff environment adaptation target in W4"; "IRuntimeEnv" ]
-      }
-    ]
+    testList "RedE2E" []

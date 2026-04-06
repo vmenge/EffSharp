@@ -15,5 +15,6 @@ let main argv =
           SupportedSyncE2E.tests
           SupportedAsyncE2E.tests
           SupportedEffExactE2E.tests
+          SupportedEffProvideFromE2E.tests
         ]
     )

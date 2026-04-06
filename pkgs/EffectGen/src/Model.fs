@@ -34,6 +34,7 @@ type EffectInterface = {
   ServiceName: string
   EnvironmentName: string
   PropertyName: string
+  InheritedEnvironments: string list
   Methods: EffectMethod list
 }
 

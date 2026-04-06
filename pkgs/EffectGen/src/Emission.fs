@@ -83,6 +83,12 @@ module Emission =
           appendLine builder "    |> Eff.flatten"
         elif environmentType = effectInterface.EnvironmentName || environmentType = $"#{effectInterface.EnvironmentName}" then
           appendLine builder "    |> Eff.flatten"
+        elif effectInterface.InheritedEnvironments |> List.contains environmentType then
+          appendLine
+            builder
+            $"    |> Eff.map (Eff.provideFrom (fun (outer: #{effectInterface.EnvironmentName}) -> outer :> {environmentType}))"
+
+          appendLine builder "    |> Eff.flatten"
         else
           failwith $"Unsupported Eff environment adaptation target in W4: {environmentType}"
     | ReturnShape.Unsupported _ -> ()
@@ -101,7 +107,13 @@ module Emission =
     appendLine builder "open EffFs.Core"
     appendLine builder ""
     appendLine builder $"type {effectInterface.EnvironmentName} ="
-    appendLine builder $"  abstract {effectInterface.PropertyName}: {effectInterface.ServiceName}"
+
+    if effectInterface.InheritedEnvironments.IsEmpty then
+      appendLine builder $"  abstract {effectInterface.PropertyName}: {effectInterface.ServiceName}"
+    else
+      for inheritedEnvironment in effectInterface.InheritedEnvironments do
+        appendLine builder $"  inherit {inheritedEnvironment}"
+
     appendLine builder ""
     appendLine builder $"module {effectInterface.EnvironmentName} ="
 

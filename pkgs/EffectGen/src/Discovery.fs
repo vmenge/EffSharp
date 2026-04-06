@@ -123,12 +123,25 @@ module Discovery =
             if hasUnsupported then
               None
             else
+              let inheritedEnvironments =
+                discoveredMethods
+                |> List.choose (fun methodModel ->
+                  match methodModel.ReturnShape with
+                  | ReturnShape.Eff(_, _, environmentType)
+                    when environmentType <> "unit"
+                         && environmentType <> Naming.environmentName serviceName
+                         && environmentType <> $"#{Naming.environmentName serviceName}" ->
+                      Some environmentType
+                  | _ -> None)
+                |> List.distinct
+
               Some {
                 Namespace = namespaceName
                 SourceFile = ""
                 ServiceName = serviceName
                 EnvironmentName = Naming.environmentName serviceName
                 PropertyName = Naming.propertyName serviceName
+                InheritedEnvironments = inheritedEnvironments
                 Methods = discoveredMethods
               }
     | _ -> None
