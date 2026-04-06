@@ -55,14 +55,7 @@ module Harness =
   let buildProject (projectPath: string) : Task<BuildResult> = task {
     do! ensureProjectBuild coreProject
     do! ensureProjectBuild effectGenProject
-    let! cleanResult = runDotnet None $"clean \"{projectPath}\" --nologo"
-
-    if cleanResult.ExitCode <> 0 then
-      return cleanResult
-    else
-      do! ensureProjectBuild coreProject
-      do! ensureProjectBuild effectGenProject
-      return! runDotnet None $"build \"{projectPath}\" --nologo"
+    return! runDotnet None $"build \"{projectPath}\" --nologo -t:Rebuild"
   }
 
   let packProject (projectPath: string) (outputDirectory: string) : Task<BuildResult> = task {

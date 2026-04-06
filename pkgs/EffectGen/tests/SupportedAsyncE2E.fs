@@ -14,20 +14,23 @@ module SupportedAsyncE2E =
   let private fixtureProject =
     Path.Combine(fixtureDirectory, $"{fixtureName}.fsproj")
 
-  let private generatedDirectory =
-    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0", "EffectGen")
+  let private intermediateDirectory =
+    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0")
 
-  let private cleanupGeneratedDirectory () =
+  let private generatedDirectory =
+    Path.Combine(intermediateDirectory, "EffectGen")
+
+  let private cleanupIntermediateDirectory () =
     try
-      if Directory.Exists(generatedDirectory) then
-        Directory.Delete(generatedDirectory, true)
+      if Directory.Exists(intermediateDirectory) then
+        Directory.Delete(intermediateDirectory, true)
     with :? DirectoryNotFoundException ->
       ()
 
   let tests =
     testSequenced <| testList "SupportedAsyncE2E" [
       testTask "supported async fixture builds with generated wrappers in the same build" {
-        cleanupGeneratedDirectory ()
+        cleanupIntermediateDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -36,7 +39,7 @@ module SupportedAsyncE2E =
       }
 
       testTask "supported async generated output normalizes Task Async and ValueTask through Eff helpers" {
-        cleanupGeneratedDirectory ()
+        cleanupIntermediateDirectory ()
 
         let! result = buildProject fixtureProject
 

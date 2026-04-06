@@ -17,8 +17,11 @@ module ExampleE2E =
   let private exampleObjDirectory =
     Path.Combine(exampleDirectory, "obj")
 
+  let private exampleIntermediateDirectory =
+    Path.Combine(exampleObjDirectory, "Debug", "net10.0")
+
   let private generatedDirectory =
-    Path.Combine(exampleObjDirectory, "Debug", "net10.0", "EffectGen")
+    Path.Combine(exampleIntermediateDirectory, "EffectGen")
 
   let private cleanupDirectory path =
     try
@@ -30,7 +33,7 @@ module ExampleE2E =
   let tests =
     testSequenced <| testList "ExampleE2E" [
       testTask "example project builds as an EffectGen consumer in the same build" {
-        cleanupDirectory exampleObjDirectory
+        cleanupDirectory exampleIntermediateDirectory
 
         let! result = buildProject exampleProject
 

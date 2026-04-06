@@ -7,6 +7,11 @@ test:
       exit 1; \
     fi; \
     while IFS= read -r project; do \
-      echo "==> dotnet run --project $project"; \
-      dotnet run --project "$project"; \
+      project_dir=$(dirname "$project"); \
+      project_name=$(basename "$project" .fsproj); \
+      dll_path="$project_dir/bin/Debug/net10.0/$project_name.dll"; \
+      echo "==> dotnet build $project"; \
+      dotnet build "$project" --nologo; \
+      echo "==> dotnet $dll_path"; \
+      dotnet "$dll_path"; \
     done <<< "$projects"

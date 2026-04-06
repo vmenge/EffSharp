@@ -14,20 +14,23 @@ module SupportedEffExactE2E =
   let private fixtureProject =
     Path.Combine(fixtureDirectory, $"{fixtureName}.fsproj")
 
-  let private generatedDirectory =
-    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0", "EffectGen")
+  let private intermediateDirectory =
+    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0")
 
-  let private cleanupGeneratedDirectory () =
+  let private generatedDirectory =
+    Path.Combine(intermediateDirectory, "EffectGen")
+
+  let private cleanupIntermediateDirectory () =
     try
-      if Directory.Exists(generatedDirectory) then
-        Directory.Delete(generatedDirectory, true)
+      if Directory.Exists(intermediateDirectory) then
+        Directory.Delete(intermediateDirectory, true)
     with :? DirectoryNotFoundException ->
       ()
 
   let tests =
     testSequenced <| testList "SupportedEffExactE2E" [
       testTask "supported Eff exact fixture builds with generated wrappers in the same build" {
-        cleanupGeneratedDirectory ()
+        cleanupIntermediateDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -35,7 +38,7 @@ module SupportedEffExactE2E =
       }
 
       testTask "supported Eff exact generated output flattens nested Eff returns" {
-        cleanupGeneratedDirectory ()
+        cleanupIntermediateDirectory ()
 
         let! result = buildProject fixtureProject
 
