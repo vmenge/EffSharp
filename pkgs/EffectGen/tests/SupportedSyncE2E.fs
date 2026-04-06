@@ -14,23 +14,20 @@ module SupportedSyncE2E =
   let private fixtureProject =
     Path.Combine(fixtureDirectory, $"{fixtureName}.fsproj")
 
-  let private intermediateDirectory =
-    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0")
-
   let private generatedDirectory =
-    Path.Combine(intermediateDirectory, "EffectGen")
+    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0", "EffectGen")
 
-  let private cleanupIntermediateDirectory () =
+  let private cleanupGeneratedDirectory () =
     try
-      if Directory.Exists(intermediateDirectory) then
-        Directory.Delete(intermediateDirectory, true)
+      if Directory.Exists(generatedDirectory) then
+        Directory.Delete(generatedDirectory, true)
     with :? DirectoryNotFoundException ->
       ()
 
   let tests =
     testSequenced <| testList "SupportedSyncE2E" [
       testTask "supported sync fixture builds with generated wrappers in the same build" {
-        cleanupIntermediateDirectory ()
+        cleanupGeneratedDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -39,7 +36,7 @@ module SupportedSyncE2E =
       }
 
       testTask "supported sync generated output uses naming and result normalization from the spec" {
-        cleanupIntermediateDirectory ()
+        cleanupGeneratedDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -66,5 +63,16 @@ module SupportedSyncE2E =
         Expect.stringContains generatedText "let parse (arg1: string) : Eff<int, ParseError, #EParser>" "Result-returning members should produce the concrete error channel"
         Expect.stringContains generatedText "|> Eff.bind Eff.ofResult" "Result-returning members should normalize through Eff.ofResult"
         Expect.stringContains generatedText "let tryFind (arg1: int, arg2: string) : Eff<User, LookupError, #ELookup>" "tupled members should preserve the tuple structure in the generated wrapper"
+      }
+
+      testTask "supported sync fixture executes generated wrappers at runtime" {
+        cleanupGeneratedDirectory ()
+
+        let! buildResult = buildProject fixtureProject
+        Expect.equal buildResult.ExitCode 0 $"fixture {fixtureName} should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
+
+        let! runResult = runBuiltExpression fixtureProject "SupportedSyncRed.Program.run ()"
+        Expect.equal runResult.ExitCode 0 $"fixture {fixtureName} should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
+        Expect.stringContains runResult.Output "supported-sync-runtime-ok" "runtime verification should exercise the generated sync wrappers"
       }
     ]

@@ -1,13 +1,23 @@
 <Project>
   <PropertyGroup>
     <EffectGenTaskAssemblyPath Condition="'$(EffectGenTaskAssemblyPath)' == '' and Exists('$(MSBuildThisFileDirectory)..\src\bin\$(Configuration)\$(TargetFramework)\EffectGen.dll')">$(MSBuildThisFileDirectory)..\src\bin\$(Configuration)\$(TargetFramework)\EffectGen.dll</EffectGenTaskAssemblyPath>
-    <EffectGenTaskAssemblyPath Condition="'$(EffectGenTaskAssemblyPath)' == ''">$(MSBuildThisFileDirectory)..\lib\$(TargetFramework)\EffectGen.dll</EffectGenTaskAssemblyPath>
+    <EffectGenTaskAssemblyPath Condition="'$(EffectGenTaskAssemblyPath)' == ''">$(MSBuildThisFileDirectory)$(TargetFramework)\EffectGen.dll</EffectGenTaskAssemblyPath>
   </PropertyGroup>
 
   <UsingTask
     TaskName="EffFs.EffectGen.GenerateEffectFilesTask"
     AssemblyFile="$(EffectGenTaskAssemblyPath)"
-    Condition="'$(EffectGenEnabled)' == 'true' and Exists('$(EffectGenTaskAssemblyPath)')" />
+    Runtime="NET"
+    Architecture="*"
+    TaskFactory="TaskHostFactory"
+    Condition="'$(EffectGenEnabled)' == 'true' and Exists('$(EffectGenTaskAssemblyPath)') and '$(MSBuildRuntimeType)' == 'Full'" />
+
+  <UsingTask
+    TaskName="EffFs.EffectGen.GenerateEffectFilesTask"
+    AssemblyFile="$(EffectGenTaskAssemblyPath)"
+    Runtime="NET"
+    Architecture="*"
+    Condition="'$(EffectGenEnabled)' == 'true' and Exists('$(EffectGenTaskAssemblyPath)') and '$(MSBuildRuntimeType)' == 'Core'" />
 
   <Target
     Name="EffectGenGenerateSources"

@@ -1,5 +1,6 @@
 namespace EffFs.EffectGen.Tests
 
+open System
 open System.Diagnostics
 open System.IO
 open System.Threading.Tasks
@@ -19,8 +20,8 @@ module Harness =
   let private effectGenProject =
     Path.Combine(repoRoot, "pkgs", "EffectGen", "src", "EffectGen.fsproj")
 
-  let private runDotnet (workingDirectory: string option) (arguments: string) : Task<BuildResult> = task {
-    let startInfo = ProcessStartInfo("dotnet", arguments)
+  let runProcess (workingDirectory: string option) (fileName: string) (arguments: string) : Task<BuildResult> = task {
+    let startInfo = ProcessStartInfo(fileName, arguments)
     startInfo.RedirectStandardOutput <- true
     startInfo.RedirectStandardError <- true
     startInfo.UseShellExecute <- false
@@ -32,18 +33,27 @@ module Harness =
     use proc = new Process(StartInfo = startInfo)
 
     if not (proc.Start()) then
-      failwith $"failed to start dotnet {arguments}"
+      failwith $"failed to start {fileName} {arguments}"
 
+    let stdoutTask = proc.StandardOutput.ReadToEndAsync()
+    let stderrTask = proc.StandardError.ReadToEndAsync()
     do! proc.WaitForExitAsync()
-
-    let stdout = proc.StandardOutput.ReadToEnd()
-    let stderr = proc.StandardError.ReadToEnd()
+    let! stdout = stdoutTask
+    let! stderr = stderrTask
 
     return {
       ExitCode = proc.ExitCode
       Output = stdout + stderr
     }
   }
+
+  let private runDotnet (workingDirectory: string option) (arguments: string) =
+    runProcess workingDirectory "dotnet" arguments
+
+  let private builtDllPath (projectPath: string) =
+    let projectDirectory = Path.GetDirectoryName(projectPath)
+    let projectName = Path.GetFileNameWithoutExtension(projectPath)
+    Path.Combine(projectDirectory, "bin", "Debug", "net10.0", $"{projectName}.dll")
 
   let private ensureProjectBuild (projectPath: string) = task {
     let! result = runDotnet None $"build \"{projectPath}\" --nologo"
@@ -56,6 +66,37 @@ module Harness =
     do! ensureProjectBuild coreProject
     do! ensureProjectBuild effectGenProject
     return! runDotnet None $"build \"{projectPath}\" --nologo -t:Rebuild"
+  }
+
+  let buildProjectWithArgs (projectPath: string) (extraArgs: string list) : Task<BuildResult> = task {
+    do! ensureProjectBuild coreProject
+    do! ensureProjectBuild effectGenProject
+
+    let extra =
+      match extraArgs with
+      | [] -> ""
+      | args -> " " + String.concat " " args
+
+    return! runDotnet None $"build \"{projectPath}\" --nologo -t:Rebuild{extra}"
+  }
+
+  let runBuiltProject (projectPath: string) : Task<BuildResult> =
+    runDotnet None $"\"{builtDllPath projectPath}\""
+
+  let runBuiltExpression (projectPath: string) (expression: string) : Task<BuildResult> = task {
+    let scriptPath = Path.Combine(Path.GetTempPath(), $"effectgen-run-{Guid.NewGuid():N}.fsx")
+
+    try
+      File.WriteAllText(
+        scriptPath,
+        "#r @\"" + builtDllPath projectPath + "\"" + System.Environment.NewLine
+        + "printfn \"%s\" (" + expression + ")" + System.Environment.NewLine
+      )
+
+      return! runDotnet None $"fsi --nologo --exec \"{scriptPath}\""
+    finally
+      if File.Exists(scriptPath) then
+        File.Delete(scriptPath)
   }
 
   let packProject (projectPath: string) (outputDirectory: string) : Task<BuildResult> = task {

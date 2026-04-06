@@ -14,23 +14,20 @@ module SupportedEffProvideFromE2E =
   let private fixtureProject =
     Path.Combine(fixtureDirectory, $"{fixtureName}.fsproj")
 
-  let private intermediateDirectory =
-    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0")
-
   let private generatedDirectory =
-    Path.Combine(intermediateDirectory, "EffectGen")
+    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0", "EffectGen")
 
-  let private cleanupIntermediateDirectory () =
+  let private cleanupGeneratedDirectory () =
     try
-      if Directory.Exists(intermediateDirectory) then
-        Directory.Delete(intermediateDirectory, true)
+      if Directory.Exists(generatedDirectory) then
+        Directory.Delete(generatedDirectory, true)
     with :? DirectoryNotFoundException ->
       ()
 
   let tests =
     testSequenced <| testList "SupportedEffProvideFromE2E" [
       testTask "supported Eff provideFrom fixture builds with generated wrappers in the same build" {
-        cleanupIntermediateDirectory ()
+        cleanupGeneratedDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -38,7 +35,7 @@ module SupportedEffProvideFromE2E =
       }
 
       testTask "supported Eff provideFrom generated output upcasts through provideFrom before flattening" {
-        cleanupIntermediateDirectory ()
+        cleanupGeneratedDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -54,5 +51,16 @@ module SupportedEffProvideFromE2E =
         Expect.stringContains generatedText "inherit IRuntimeEnv" "The generated environment interface should inherit the mechanically matching inner environment"
         Expect.stringContains generatedText "|> Eff.map (Eff.provideFrom (fun (outer: #ERuntimeService) -> outer :> IRuntimeEnv))" "The nested Eff should be adapted through a direct upcast before flattening"
         Expect.stringContains generatedText "|> Eff.flatten" "The adapted nested Eff should then be flattened"
+      }
+
+      testTask "supported Eff provideFrom fixture executes generated wrappers at runtime" {
+        cleanupGeneratedDirectory ()
+
+        let! buildResult = buildProject fixtureProject
+        Expect.equal buildResult.ExitCode 0 $"fixture {fixtureName} should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
+
+        let! runResult = runBuiltExpression fixtureProject "SupportedEffProvideFromRed.Program.run ()"
+        Expect.equal runResult.ExitCode 0 $"fixture {fixtureName} should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
+        Expect.stringContains runResult.Output "supported-eff-providefrom-runtime-ok" "runtime verification should exercise the generated provideFrom wrapper"
       }
     ]

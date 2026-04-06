@@ -18,3 +18,10 @@ let greetingProgram (name: string) : Eff<string, exn, #EGreeter> =
 let exampleGreeting () =
   greetingProgram "EffectGen"
   |> Eff.runSync (AppEnv())
+
+let run () =
+  match exampleGreeting () with
+  | Exit.Ok greeting ->
+      greeting
+  | Exit.Err err -> failwithf "expected greeting, got managed error %A" err
+  | Exit.Exn ex -> raise ex

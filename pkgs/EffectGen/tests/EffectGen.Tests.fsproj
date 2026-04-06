@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <Compile Include="Harness.fs" />
+    <Compile Include="HarnessTests.fs" />
     <Compile Include="ScaffoldTests.fs" />
     <Compile Include="RedE2E.fs" />
     <Compile Include="ParseOptionsE2E.fs" />
@@ -16,6 +17,7 @@
     <Compile Include="SupportedEffExactE2E.fs" />
     <Compile Include="SupportedEffProvideFromE2E.fs" />
     <Compile Include="DiagnosticsE2E.fs" />
+    <Compile Include="PackagedConsumerE2E.fs" />
     <Compile Include="ValidationTests.fs" />
     <Compile Include="ExampleE2E.fs" />
     <Compile Include="Program.fs" />

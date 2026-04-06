@@ -14,23 +14,20 @@ module SupportedAsyncE2E =
   let private fixtureProject =
     Path.Combine(fixtureDirectory, $"{fixtureName}.fsproj")
 
-  let private intermediateDirectory =
-    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0")
-
   let private generatedDirectory =
-    Path.Combine(intermediateDirectory, "EffectGen")
+    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0", "EffectGen")
 
-  let private cleanupIntermediateDirectory () =
+  let private cleanupGeneratedDirectory () =
     try
-      if Directory.Exists(intermediateDirectory) then
-        Directory.Delete(intermediateDirectory, true)
+      if Directory.Exists(generatedDirectory) then
+        Directory.Delete(generatedDirectory, true)
     with :? DirectoryNotFoundException ->
       ()
 
   let tests =
     testSequenced <| testList "SupportedAsyncE2E" [
       testTask "supported async fixture builds with generated wrappers in the same build" {
-        cleanupIntermediateDirectory ()
+        cleanupGeneratedDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -39,7 +36,7 @@ module SupportedAsyncE2E =
       }
 
       testTask "supported async generated output normalizes Task Async and ValueTask through Eff helpers" {
-        cleanupIntermediateDirectory ()
+        cleanupGeneratedDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -59,5 +56,16 @@ module SupportedAsyncE2E =
         Expect.stringContains generatedText "|> Eff.bind (fun asyncValue -> Eff.ofAsync (fun () -> asyncValue))" "Async-returning members should normalize through Eff.ofAsync"
         Expect.stringContains generatedText "let read (arg1: string) : Eff<string, 'e, #EFileSystem>" "ValueTask-returning members should remain generic over the error channel"
         Expect.stringContains generatedText "|> Eff.bind (fun valueTaskValue -> Eff.ofValueTask (fun () -> valueTaskValue))" "ValueTask-returning members should normalize through Eff.ofValueTask"
+      }
+
+      testTask "supported async fixture executes generated wrappers at runtime" {
+        cleanupGeneratedDirectory ()
+
+        let! buildResult = buildProject fixtureProject
+        Expect.equal buildResult.ExitCode 0 $"fixture {fixtureName} should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
+
+        let! runResult = runBuiltExpression fixtureProject "SupportedAsyncRed.Program.run ()"
+        Expect.equal runResult.ExitCode 0 $"fixture {fixtureName} should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
+        Expect.stringContains runResult.Output "supported-async-runtime-ok" "runtime verification should exercise the generated async wrappers"
       }
     ]

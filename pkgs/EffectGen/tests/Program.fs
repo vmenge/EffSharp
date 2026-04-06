@@ -9,6 +9,7 @@ let main argv =
     (testSequenced <| testList
         "all"
         [
+          HarnessTests.tests
           ScaffoldTests.tests
           RedE2E.tests
           ParseOptionsE2E.tests
@@ -18,6 +19,7 @@ let main argv =
           SupportedEffExactE2E.tests
           SupportedEffProvideFromE2E.tests
           DiagnosticsE2E.tests
+          PackagedConsumerE2E.tests
           ValidationTests.tests
           ExampleE2E.tests
         ]

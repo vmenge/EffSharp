@@ -39,6 +39,10 @@
   <ItemGroup>
     <None Include="..\buildTransitive\EffectGen.props" Pack="true" PackagePath="buildTransitive\EffectGen.props" Visible="false" />
     <None Include="..\buildTransitive\EffectGen.targets" Pack="true" PackagePath="buildTransitive\EffectGen.targets" Visible="false" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\EffectGen.dll" Pack="true" PackagePath="buildTransitive\$(TargetFramework)\EffectGen.dll" Visible="false" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\EffectGen.deps.json" Pack="true" PackagePath="buildTransitive\$(TargetFramework)\EffectGen.deps.json" Visible="false" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\FSharp.Core.dll" Pack="true" PackagePath="buildTransitive\$(TargetFramework)\FSharp.Core.dll" Visible="false" />
+    <None Include="bin\$(Configuration)\$(TargetFramework)\FSharp.Compiler.Service.dll" Pack="true" PackagePath="buildTransitive\$(TargetFramework)\FSharp.Compiler.Service.dll" Visible="false" />
   </ItemGroup>
 
 </Project>

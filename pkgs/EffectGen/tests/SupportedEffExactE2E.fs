@@ -14,23 +14,20 @@ module SupportedEffExactE2E =
   let private fixtureProject =
     Path.Combine(fixtureDirectory, $"{fixtureName}.fsproj")
 
-  let private intermediateDirectory =
-    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0")
-
   let private generatedDirectory =
-    Path.Combine(intermediateDirectory, "EffectGen")
+    Path.Combine(fixtureDirectory, "obj", "Debug", "net10.0", "EffectGen")
 
-  let private cleanupIntermediateDirectory () =
+  let private cleanupGeneratedDirectory () =
     try
-      if Directory.Exists(intermediateDirectory) then
-        Directory.Delete(intermediateDirectory, true)
+      if Directory.Exists(generatedDirectory) then
+        Directory.Delete(generatedDirectory, true)
     with :? DirectoryNotFoundException ->
       ()
 
   let tests =
     testSequenced <| testList "SupportedEffExactE2E" [
       testTask "supported Eff exact fixture builds with generated wrappers in the same build" {
-        cleanupIntermediateDirectory ()
+        cleanupGeneratedDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -38,7 +35,7 @@ module SupportedEffExactE2E =
       }
 
       testTask "supported Eff exact generated output flattens nested Eff returns" {
-        cleanupIntermediateDirectory ()
+        cleanupGeneratedDirectory ()
 
         let! result = buildProject fixtureProject
 
@@ -52,5 +49,16 @@ module SupportedEffExactE2E =
 
         Expect.stringContains generatedText "let spawn (arg1: Job) : Eff<JobHandle<JobResult>, SpawnError, #ERuntime>" "Eff-returning members should preserve the concrete success and error types"
         Expect.stringContains generatedText "|> Eff.flatten" "Exact Eff returns should flatten the nested Eff value"
+      }
+
+      testTask "supported Eff exact fixture executes generated wrappers at runtime" {
+        cleanupGeneratedDirectory ()
+
+        let! buildResult = buildProject fixtureProject
+        Expect.equal buildResult.ExitCode 0 $"fixture {fixtureName} should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
+
+        let! runResult = runBuiltExpression fixtureProject "SupportedEffExactRed.Program.run ()"
+        Expect.equal runResult.ExitCode 0 $"fixture {fixtureName} should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
+        Expect.stringContains runResult.Output "supported-eff-exact-runtime-ok" "runtime verification should exercise the generated Eff-flattening wrapper"
       }
     ]

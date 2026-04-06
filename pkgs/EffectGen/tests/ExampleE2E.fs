@@ -17,11 +17,8 @@ module ExampleE2E =
   let private exampleObjDirectory =
     Path.Combine(exampleDirectory, "obj")
 
-  let private exampleIntermediateDirectory =
-    Path.Combine(exampleObjDirectory, "Debug", "net10.0")
-
   let private generatedDirectory =
-    Path.Combine(exampleIntermediateDirectory, "EffectGen")
+    Path.Combine(exampleObjDirectory, "Debug", "net10.0", "EffectGen")
 
   let private cleanupDirectory path =
     try
@@ -33,7 +30,7 @@ module ExampleE2E =
   let tests =
     testSequenced <| testList "ExampleE2E" [
       testTask "example project builds as an EffectGen consumer in the same build" {
-        cleanupDirectory exampleIntermediateDirectory
+        cleanupDirectory generatedDirectory
 
         let! result = buildProject exampleProject
 
@@ -48,6 +45,17 @@ module ExampleE2E =
 
         Expect.stringContains generatedText "type EGreeter =" "the example should generate an EGreeter environment interface"
         Expect.stringContains generatedText "let greet (arg1: string) : Eff<string, 'e, #EGreeter>" "the example should generate a callable wrapper from the [<Effect>] interface"
+      }
+
+      testTask "example project executes generated wrappers at runtime" {
+        cleanupDirectory generatedDirectory
+
+        let! buildResult = buildProject exampleProject
+        Expect.equal buildResult.ExitCode 0 $"example project should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
+
+        let! runResult = runBuiltExpression exampleProject "EffFs.Examples.Program.run ()"
+        Expect.equal runResult.ExitCode 0 $"example project should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
+        Expect.stringContains runResult.Output "Hello, EffectGen." "the example should print the greeting produced through the generated wrapper"
       }
 
       testTask "packed package includes the generator assembly and transitive MSBuild assets" {
