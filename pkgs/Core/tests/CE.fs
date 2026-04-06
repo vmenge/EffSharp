@@ -238,6 +238,35 @@ module CE =
         Expect.isTrue probe.Disposed "use! should dispose the resource"
       }
 
+      testTask "use allows null disposables" {
+        let resource: IDisposable = null
+
+        let! value =
+          eff {
+            use _resource = resource
+            return 1
+          }
+          |> Eff.runTask ()
+
+        Expect.equal value (Exit.Ok 1) "use should treat null disposal as a no-op"
+      }
+
+      testTask "use! allows null disposables" {
+        let resource: IDisposable = null
+
+        let! value =
+          eff {
+            use! _resource = Pure resource
+            return 1
+          }
+          |> Eff.runTask ()
+
+        Expect.equal
+          value
+          (Exit.Ok 1)
+          "use! should treat null disposal as a no-op"
+      }
+
       testTask "defer runs on success" {
         let mutable cleaned = false
 

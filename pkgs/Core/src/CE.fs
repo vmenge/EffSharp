@@ -24,7 +24,12 @@ module CE =
       : Eff<'t, 'e, 'env> when 'r :> System.IDisposable =
       Eff.bracket
         (Pure resource)
-        (fun r -> Eff.thunk (fun () -> r.Dispose()))
+        (fun r ->
+          Eff.thunk (fun () ->
+            match box r with
+            | null -> ()
+            | _ -> r.Dispose()
+          ))
         binder
 
     member this.While

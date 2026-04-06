@@ -310,7 +310,7 @@ module Eff =
     match ef with
     | Eff.Pure v -> f v
     | Eff.Err err -> Eff.Err err
-    | Eff.Suspend suspend -> Eff.Suspend(fun () -> bind f (suspend ()))
+    | Eff.Suspend _ -> Eff.Node(FlatMap(ef, f))
     | Eff.Thunk thunk -> Eff.Suspend(fun () -> f (thunk ()))
     | Eff.Task _ -> Eff.Node(FlatMap(ef, f))
     | Eff.Read _ -> Eff.Node(FlatMap(ef, f))
@@ -351,7 +351,9 @@ module Eff =
 
   let bracket acquire release usefn =
     acquire
-    |> bind (fun resource -> usefn resource |> defer (release resource))
+    |> bind (fun resource ->
+      suspend (fun () -> usefn resource) |> defer (release resource)
+    )
 
   let tap
     (f: 't -> Eff<'k, 'e, 'env>)
@@ -381,100 +383,154 @@ module Eff =
   let private boxedEff (eff: Eff<'t, 'e, 'env>) : BoxedEff<'env> =
     BoxedEff<'t, 'e, 'env>(eff) :> BoxedEff<'env>
 
-  let rec private unwind
+  let private unwind
     (stepper: Stepper<'env>)
     (exit: BoxedExit)
     (frames: Frame<'env> list)
     : StepResult<'env> =
-    match frames with
-    | [] -> Done exit
-    | frame :: rest ->
-      let action =
-        match exit with
-        | BoxedOk value -> frame.HandleOk(value, rest)
-        | BoxedErr err -> frame.HandleErr(err, rest)
-        | BoxedExn ex -> frame.HandleExn(ex, rest)
+    let mutable currentExit = exit
+    let mutable currentFrames = frames
+    let mutable result = ValueNone
+    let mutable finished = false
 
-      match action with
-      | ContinueWithEff(eff, nextFrames) -> Continue(eff, nextFrames)
-      | ContinueWithExit(nextExit, nextFrames) ->
-        unwind stepper nextExit nextFrames
-      | RunCleanup(cleanup, cont) ->
-        let cleanupFrame =
-          { new Frame<'env>() with
-              member _.HandleOk(value, _) = cont (BoxedOk value)
-              member _.HandleErr(err, _) = cont (BoxedErr err)
-              member _.HandleExn(ex, _) = cont (BoxedExn ex)
-          }
+    while not finished do
+      match currentFrames with
+      | [] ->
+        result <- ValueSome(Done currentExit)
+        finished <- true
+      | frame :: rest ->
+        let action =
+          match currentExit with
+          | BoxedOk value -> frame.HandleOk(value, rest)
+          | BoxedErr err -> frame.HandleErr(err, rest)
+          | BoxedExn ex -> frame.HandleExn(ex, rest)
 
-        Continue(cleanup, [ cleanupFrame ])
+        match action with
+        | ContinueWithEff(eff, nextFrames) ->
+          result <- ValueSome(Continue(eff, nextFrames))
+          finished <- true
+        | ContinueWithExit(nextExit, nextFrames) ->
+          currentExit <- nextExit
+          currentFrames <- nextFrames
+        | RunCleanup(cleanup, cont) ->
+          let cleanupFrame =
+            { new Frame<'env>() with
+                member _.HandleOk(value, _) = cont (BoxedOk value)
+                member _.HandleErr(err, _) = cont (BoxedErr err)
+                member _.HandleExn(ex, _) = cont (BoxedExn ex)
+            }
 
-  let rec private stepEff<'t, 'e, 'env>
+          result <- ValueSome(Continue(cleanup, [ cleanupFrame ]))
+          finished <- true
+
+    match result with
+    | ValueSome step -> step
+    | ValueNone -> failwith "unwind loop exited without a result"
+
+  let private stepEff<'t, 'e, 'env>
     (stepper: Stepper<'env>)
     (env: 'env)
     (eff: Eff<'t, 'e, 'env>)
     (frames: Frame<'env> list)
     : StepResult<'env> =
-    match eff with
-    | Eff.Pure value -> unwind stepper (BoxedOk(box value)) frames
-    | Eff.Err err -> unwind stepper (BoxedErr(box err)) frames
-    | Eff.Suspend suspend ->
-      try
-        stepEff stepper env (suspend ()) frames
-      with ex ->
-        unwind stepper (BoxedExn ex) frames
-    | Eff.Thunk thunk ->
-      try
-        unwind stepper (BoxedOk(box (thunk ()))) frames
-      with ex ->
-        unwind stepper (BoxedExn ex) frames
-    | Eff.Task tsk ->
-      try
-        let awaited = tsk().ContinueWith(fun (t: Task<'t>) -> box t.Result)
+    let mutable currentEff = eff
+    let mutable currentFrames = frames
+    let mutable result = ValueNone
+    let mutable finished = false
 
-        Await(
-          awaited,
-          function
-          | Ok value -> unwind stepper (BoxedOk value) frames
-          | Error ex -> unwind stepper (BoxedExn ex) frames
-        )
-      with ex ->
-        unwind stepper (BoxedExn ex) frames
-    | Eff.Read read ->
-      try
-        unwind stepper (BoxedOk(box (read env))) frames
-      with ex ->
-        unwind stepper (BoxedExn ex) frames
-    | Eff.Node node ->
-      match box node with
-      | :? INodeRuntime<'env> as runtime -> runtime.Enter frames
-      | _ -> failwith "unknown node"
-
-  let rec private driveStep
-    (env: 'env)
-    (stepper: Stepper<'env>)
-    (step: StepResult<'env>)
-    : Task<BoxedExit> =
-    task {
-      match step with
-      | Continue(nextEff, nextFrames) ->
-        return! runTaskLoop env stepper nextEff nextFrames
-      | Done exit -> return exit
-      | Await(taskObj, cont) ->
+    while not finished do
+      match currentEff with
+      | Eff.Pure value ->
+        result <- ValueSome(unwind stepper (BoxedOk(box value)) currentFrames)
+        finished <- true
+      | Eff.Err err ->
+        result <- ValueSome(unwind stepper (BoxedErr(box err)) currentFrames)
+        finished <- true
+      | Eff.Suspend suspend ->
         try
-          let! value = taskObj
-          return! driveStep env stepper (cont (Ok value))
+          currentEff <- suspend ()
         with ex ->
-          return! driveStep env stepper (cont (Error ex))
-    }
+          result <- ValueSome(unwind stepper (BoxedExn ex) currentFrames)
+          finished <- true
+      | Eff.Thunk thunk ->
+        try
+          result <- ValueSome(unwind stepper (BoxedOk(box (thunk ()))) currentFrames)
+        with ex ->
+          result <- ValueSome(unwind stepper (BoxedExn ex) currentFrames)
+        finished <- true
+      | Eff.Task tsk ->
+        try
+          let awaited =
+            task {
+              let! value = tsk ()
+              return box value
+            }
 
-  and private runTaskLoop
+          result <-
+            ValueSome(
+              Await(
+                awaited,
+                function
+                | Ok value -> unwind stepper (BoxedOk value) currentFrames
+                | Error ex -> unwind stepper (BoxedExn ex) currentFrames
+              )
+            )
+
+        with ex ->
+          result <- ValueSome(unwind stepper (BoxedExn ex) currentFrames)
+
+        finished <- true
+      | Eff.Read read ->
+        try
+          result <- ValueSome(unwind stepper (BoxedOk(box (read env))) currentFrames)
+        with ex ->
+          result <- ValueSome(unwind stepper (BoxedExn ex) currentFrames)
+
+        finished <- true
+      | Eff.Node node ->
+        result <-
+          ValueSome(
+            match box node with
+            | :? INodeRuntime<'env> as runtime -> runtime.Enter currentFrames
+            | _ -> failwith "unknown node"
+          )
+
+        finished <- true
+
+    match result with
+    | ValueSome step -> step
+    | ValueNone -> failwith "step loop exited without a result"
+
+  let private runTaskLoop
     (env: 'env)
     (stepper: Stepper<'env>)
     (eff: BoxedEff<'env>)
     (frames: Frame<'env> list)
     : Task<BoxedExit> =
-    driveStep env stepper (eff.StepInto(stepper, frames))
+    task {
+      let mutable current = eff.StepInto(stepper, frames)
+      let mutable exit = ValueNone
+      let mutable finished = false
+
+      while not finished do
+        match current with
+        | Continue(nextEff, nextFrames) ->
+          current <- nextEff.StepInto(stepper, nextFrames)
+        | Done value ->
+          exit <- ValueSome value
+          finished <- true
+        | Await(taskObj, cont) ->
+          try
+            let! value = taskObj
+            current <- cont (Ok value)
+          with ex ->
+            current <- cont (Error ex)
+
+      return
+        match exit with
+        | ValueSome value -> value
+        | ValueNone -> failwith "run loop exited without a result"
+    }
 
   let runTask (env: 'env) (eff: Eff<'t, 'e, 'env>) : Task<Exit<'t, 'e>> =
     let rec stepper =

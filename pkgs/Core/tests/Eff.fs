@@ -3,6 +3,7 @@ namespace EffFs.Core.Tests
 module Eff =
   open Expecto
   open EffFs.Core
+  open System.Threading
   open System.Threading.Tasks
 
   let tests =
@@ -58,6 +59,19 @@ module Eff =
         Expect.equal value (Exit.Ok 5) "should be equal"
       }
 
+      testTask "deep suspend chains stay stack-safe" {
+        let depth = 100_000
+
+        let rec loop n =
+          if n = 0 then
+            Pure 42
+          else
+            Eff.suspend (fun () -> loop (n - 1))
+
+        let! value = loop depth |> Eff.runTask ()
+        Expect.equal value (Exit.Ok 42) "should resolve deep suspend chains"
+      }
+
       testTask "Thunk resolves" {
         let! value = Eff.thunk (fun () -> 5) |> Eff.runTask ()
         Expect.equal value (Exit.Ok 5) "should be equal"
@@ -67,6 +81,43 @@ module Eff =
         let! value = Eff.ofTask (fun () -> task { return 5 }) |> Eff.runTask ()
 
         Expect.equal value (Exit.Ok 5) "should be equal"
+      }
+
+      testTask "Task failure preserves the original exception" {
+        let! value =
+          Eff.ofTask (fun () -> task {
+            failwith "boom"
+            return 5
+          })
+          |> Eff.runTask ()
+
+        let err: exn = Exit.ex value
+
+        Expect.equal
+          (err.GetType())
+          typeof<System.Exception>
+          "task failure should not be wrapped in AggregateException"
+
+        Expect.equal
+          err.Message
+          "boom"
+          "task failure should preserve the original exception"
+      }
+
+      testTask "Task cancellation preserves TaskCanceledException" {
+        let cts = new CancellationTokenSource()
+        cts.Cancel()
+
+        let! value =
+          Eff.ofTask (fun () -> Task.FromCanceled<int>(cts.Token))
+          |> Eff.runTask ()
+
+        let err: exn = Exit.ex value
+
+        Expect.equal
+          (err.GetType())
+          typeof<TaskCanceledException>
+          "task cancellation should surface as TaskCanceledException"
       }
 
       testTask "ValueTask resolves" {
@@ -81,6 +132,24 @@ module Eff =
           Eff.ofAsync (fun () -> async { return 5 }) |> Eff.runTask ()
 
         Expect.equal value (Exit.Ok 5) "should be equal"
+      }
+
+      testTask "Async failure preserves the original exception" {
+        let! value =
+          Eff.ofAsync (fun () -> async { failwith "kaboom" })
+          |> Eff.runTask ()
+
+        let err: exn = Exit.ex value
+
+        Expect.equal
+          (err.GetType())
+          typeof<System.Exception>
+          "async failure should not be wrapped in AggregateException"
+
+        Expect.equal
+          err.Message
+          "kaboom"
+          "async failure should preserve the original exception"
       }
 
       testTask "Result resolves" {
@@ -354,6 +423,44 @@ module Eff =
           events
           [ "acquire"; "use 42"; "release 42" ]
           "should still release on failure"
+      }
+
+      testTask "bracket releases when use throws before returning an effect" {
+        let events = ResizeArray<string>()
+
+        let acquire =
+          Eff.thunk (fun () ->
+            events.Add "acquire"
+            42
+          )
+
+        let release resource =
+          Eff.thunk (fun () -> events.Add $"release {resource}")
+
+        let body resource =
+          events.Add $"use {resource}"
+          failwith "boom"
+
+        let! result = Eff.bracket acquire release body |> Eff.runTask ()
+
+        let err: exn = Exit.ex result
+        Expect.equal err.Message "boom" "should return use error"
+
+        Expect.sequenceEqual
+          events
+          [ "acquire"; "use 42"; "release 42" ]
+          "should still release when use throws synchronously"
+      }
+
+      testTask "deep bind chains stay stack-safe" {
+        let depth = 100_000
+        let mutable program: Eff<int, unit, unit> = Eff.suspend (fun () -> Pure 0)
+
+        for _ in 1 .. depth do
+          program <- program |> Eff.bind (fun value -> Pure(value + 1))
+
+        let! value = program |> Eff.runTask ()
+        Expect.equal value (Exit.Ok depth) "should resolve deep bind chains"
       }
 
     ]
