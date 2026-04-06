@@ -7,6 +7,7 @@
     <Version>0.0.1</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/vmenge/EffSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vmenge/EffSharp</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
