@@ -11,7 +11,7 @@ test:
       project_name=$(basename "$project" .fsproj); \
       dll_path="$project_dir/bin/Debug/net10.0/$project_name.dll"; \
       echo "==> dotnet build $project"; \
-      dotnet build "$project" --nologo; \
+      dotnet build "$project" --nologo -m:1; \
       echo "==> dotnet $dll_path"; \
       dotnet "$dll_path"; \
     done <<< "$projects"

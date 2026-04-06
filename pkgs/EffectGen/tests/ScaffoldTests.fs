@@ -24,6 +24,7 @@ module ScaffoldTests =
         let solution = readAllText solutionPath
 
         Expect.stringContains solution "pkgs/EffectGen/src/EffectGen.fsproj" "solution should include the EffectGen package project"
+        Expect.stringContains solution "pkgs/EffectGen/tool/EffectGen.Tool.fsproj" "solution should include the EffectGen source-mode tool project"
         Expect.stringContains solution "pkgs/EffectGen/tests/EffectGen.Tests.fsproj" "solution should include the EffectGen test project"
       )
 

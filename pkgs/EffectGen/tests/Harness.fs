@@ -56,7 +56,7 @@ module Harness =
     Path.Combine(projectDirectory, "bin", "Debug", "net10.0", $"{projectName}.dll")
 
   let private ensureProjectBuild (projectPath: string) = task {
-    let! result = runDotnet None $"build \"{projectPath}\" --nologo"
+    let! result = runDotnet None $"build \"{projectPath}\" --nologo -m:1"
 
     if result.ExitCode <> 0 then
       failwith $"failed to build prerequisite project {projectPath}{System.Environment.NewLine}{result.Output}"
@@ -65,7 +65,7 @@ module Harness =
   let buildProject (projectPath: string) : Task<BuildResult> = task {
     do! ensureProjectBuild coreProject
     do! ensureProjectBuild effectGenProject
-    return! runDotnet None $"build \"{projectPath}\" --nologo -t:Rebuild"
+    return! runDotnet None $"build \"{projectPath}\" --nologo -m:1 -t:Rebuild"
   }
 
   let buildProjectWithArgs (projectPath: string) (extraArgs: string list) : Task<BuildResult> = task {
@@ -77,7 +77,7 @@ module Harness =
       | [] -> ""
       | args -> " " + String.concat " " args
 
-    return! runDotnet None $"build \"{projectPath}\" --nologo -t:Rebuild{extra}"
+    return! runDotnet None $"build \"{projectPath}\" --nologo -m:1 -t:Rebuild{extra}"
   }
 
   let runBuiltProject (projectPath: string) : Task<BuildResult> =

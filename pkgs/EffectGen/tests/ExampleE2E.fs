@@ -14,6 +14,9 @@ module ExampleE2E =
   let private exampleDirectory =
     Path.GetDirectoryName(exampleProject)
 
+  let private exampleProjectText () =
+    File.ReadAllText(exampleProject)
+
   let private exampleObjDirectory =
     Path.Combine(exampleDirectory, "obj")
 
@@ -30,6 +33,11 @@ module ExampleE2E =
   let tests =
     testSequenced <| testList "ExampleE2E" [
       testTask "example project builds as an EffectGen consumer in the same build" {
+        let projectText = exampleProjectText ()
+
+        Expect.isFalse (projectText.Contains("EffectGen.props")) "the example should not manually import EffectGen.props"
+        Expect.isFalse (projectText.Contains("EffectGen.targets")) "the example should not manually import EffectGen.targets"
+
         cleanupDirectory generatedDirectory
 
         let! result = buildProject exampleProject

@@ -11,6 +11,9 @@
   <Folder Name="/pkgs/EffectGen/src/">
     <Project Path="pkgs/EffectGen/src/EffectGen.fsproj" />
   </Folder>
+  <Folder Name="/pkgs/EffectGen/tool/">
+    <Project Path="pkgs/EffectGen/tool/EffectGen.Tool.fsproj" />
+  </Folder>
   <Folder Name="/pkgs/EffectGen/tests/">
     <Project Path="pkgs/EffectGen/tests/EffectGen.Tests.fsproj" />
   </Folder>

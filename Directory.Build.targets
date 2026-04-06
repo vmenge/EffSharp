@@ -1,0 +1,79 @@
+<Project>
+  <PropertyGroup>
+    <_EffectGenSourceProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)pkgs/EffectGen/src/EffectGen.fsproj'))</_EffectGenSourceProjectPath>
+    <_EffectGenToolProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)pkgs/EffectGen/tool/EffectGen.Tool.fsproj'))</_EffectGenToolProjectPath>
+    <_EffectGenTestsProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)pkgs/EffectGen/tests/EffectGen.Tests.fsproj'))</_EffectGenTestsProjectPath>
+    <_EffectGenToolDllPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)pkgs/EffectGen/tool/bin/$(Configuration)/net10.0/EffectGen.Tool.dll'))</_EffectGenToolDllPath>
+  </PropertyGroup>
+
+  <Target
+    Name="EffectGenGenerateSourcesFromProjectReference"
+    BeforeTargets="FSharpSourceCodeCompileOrder"
+    Condition="'$(Language)' == 'F#' and '$(EffectGenSourceMode)' != 'false' and '$(MSBuildProjectFullPath)' != '$(_EffectGenSourceProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_EffectGenToolProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_EffectGenTestsProjectPath)'">
+    <ItemGroup>
+      <_EffectGenSourceProjectReference
+        Include="@(ProjectReference)"
+        Condition="'%(FullPath)' != '' and '%(FullPath)' == '$(_EffectGenSourceProjectPath)'" />
+    </ItemGroup>
+
+    <PropertyGroup Condition="'@(_EffectGenSourceProjectReference)' != ''">
+      <_EffectGenGeneratedDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)EffectGen'))</_EffectGenGeneratedDirectory>
+      <_EffectGenCompileItemsFile>$(_EffectGenGeneratedDirectory)\compile-items.txt</_EffectGenCompileItemsFile>
+      <_EffectGenParseArgsFile>$(_EffectGenGeneratedDirectory)\parse-args.txt</_EffectGenParseArgsFile>
+      <_EffectGenOtherFlagsFile>$(_EffectGenGeneratedDirectory)\other-flags.txt</_EffectGenOtherFlagsFile>
+      <_EffectGenOrderedCompileItemsFile>$(_EffectGenGeneratedDirectory)\ordered-compile-items.txt</_EffectGenOrderedCompileItemsFile>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'@(_EffectGenSourceProjectReference)' != ''">
+      <_EffectGenDefine Include="$(DefineConstants)" Condition="'$(DefineConstants)' != ''" />
+      <_EffectGenParseCommandLineArg Include="--targetprofile:$(TargetProfile)" Condition="'$(TargetProfile)' != ''" />
+      <_EffectGenParseCommandLineArg Include="--langversion:$(LangVersion)" Condition="'$(LangVersion)' != ''" />
+      <_EffectGenParseCommandLineArg Include="@(_EffectGenDefine->'--define:%(Identity)')" />
+      <_EffectGenParseCommandLineArg Include="@(DisabledLanguageFeatures->'--disable-language-feature:%(Identity)')" />
+    </ItemGroup>
+
+    <MSBuild
+      Projects="$(_EffectGenToolProjectPath)"
+      Targets="Build"
+      Properties="Configuration=$(Configuration)"
+      Condition="'@(_EffectGenSourceProjectReference)' != ''" />
+
+    <MakeDir
+      Directories="$(_EffectGenGeneratedDirectory)"
+      Condition="'@(_EffectGenSourceProjectReference)' != ''" />
+
+    <WriteLinesToFile
+      File="$(_EffectGenCompileItemsFile)"
+      Lines="@(Compile->'%(FullPath)')"
+      Overwrite="true"
+      Condition="'@(_EffectGenSourceProjectReference)' != ''" />
+
+    <WriteLinesToFile
+      File="$(_EffectGenParseArgsFile)"
+      Lines="@(_EffectGenParseCommandLineArg)"
+      Overwrite="true"
+      Condition="'@(_EffectGenSourceProjectReference)' != ''" />
+
+    <WriteLinesToFile
+      File="$(_EffectGenOtherFlagsFile)"
+      Lines="$(OtherFlags)"
+      Overwrite="true"
+      Condition="'@(_EffectGenSourceProjectReference)' != ''" />
+
+    <Exec
+      Command="dotnet &quot;$(_EffectGenToolDllPath)&quot; --project-directory &quot;$(MSBuildProjectDirectory)&quot; --intermediate-output-path &quot;$(IntermediateOutputPath)&quot; --compile-items-file &quot;$(_EffectGenCompileItemsFile)&quot; --parse-args-file &quot;$(_EffectGenParseArgsFile)&quot; --ordered-compile-items-file &quot;$(_EffectGenOrderedCompileItemsFile)&quot; --other-flags-file &quot;$(_EffectGenOtherFlagsFile)&quot;"
+      ConsoleToMsBuild="true"
+      Condition="'@(_EffectGenSourceProjectReference)' != ''" />
+
+    <ReadLinesFromFile
+      File="$(_EffectGenOrderedCompileItemsFile)"
+      Condition="'@(_EffectGenSourceProjectReference)' != ''">
+      <Output TaskParameter="Lines" ItemName="_EffectGenOrderedCompile" />
+    </ReadLinesFromFile>
+
+    <ItemGroup Condition="'@(_EffectGenSourceProjectReference)' != ''">
+      <Compile Remove="@(Compile)" />
+      <Compile Include="@(_EffectGenOrderedCompile)" />
+    </ItemGroup>
+  </Target>
+</Project>
