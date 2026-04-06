@@ -52,8 +52,14 @@ module Generation =
       |> Map.ofArray
 
     let orderedItems = ResizeArray<string>()
+    let generatedInputs, sourceInputs =
+      compileInputs
+      |> Array.partition _.IsGenerated
 
-    for compileInput in compileInputs do
+    for generatedInput in generatedInputs do
+      orderedItems.Add(generatedInput.FullPath)
+
+    for compileInput in sourceInputs do
       orderedItems.Add(compileInput.FullPath)
 
       match Map.tryFind compileInput.FullPath generatedBySource with
@@ -90,8 +96,12 @@ module Generation =
     let outputDirectory =
       ProjectInputs.generatedOutputDirectory request.ProjectDirectory request.IntermediateOutputPath
 
-    let sourceFiles =
+    let sourceCompileInputs =
       request.CompileInputs
+      |> Array.filter (_.IsGenerated >> not)
+
+    let sourceFiles =
+      sourceCompileInputs
       |> Array.map _.FullPath
       |> Array.toList
 
@@ -99,7 +109,7 @@ module Generation =
       request.ParseCommandLineArgs @ parseOtherFlags request.OtherFlags
 
     let parsedFiles =
-      request.CompileInputs
+      sourceCompileInputs
       |> Array.map (fun compileInput ->
         FcsParsing.parseFile sourceFiles parseCommandLineArgs compileInput.FullPath)
 

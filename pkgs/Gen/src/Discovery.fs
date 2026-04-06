@@ -1,6 +1,7 @@
 namespace EffSharp.Gen
 
 open System
+open System.Text.RegularExpressions
 open FSharp.Compiler.Syntax
 open FSharp.Compiler.Text
 
@@ -46,6 +47,15 @@ module Discovery =
       let startOffset = lineOffsets[range.StartLine - 1] + range.StartColumn
       let endOffset = lineOffsets[range.EndLine - 1] + range.EndColumn
       source.Substring(startOffset, endOffset - startOffset).Trim()
+
+  let private discoverOpenNamespaces (source: string) =
+    let pattern = Regex(@"^\s*open\s+(?!type\b)([A-Za-z_][A-Za-z0-9_']*(?:\.[A-Za-z_][A-Za-z0-9_']*)*)\s*$", RegexOptions.Multiline)
+
+    pattern.Matches(source)
+    |> Seq.cast<Match>
+    |> Seq.map (fun matched -> matched.Groups[1].Value)
+    |> Seq.distinct
+    |> Seq.toList
 
   let private hasEffectAttribute (attributes: SynAttributeList list) =
     let hasAttributeName expectedShortName expectedAttributeName (name: string) =
@@ -170,7 +180,7 @@ module Discovery =
             "[<Effect>] interface members are not supported here. Only abstract methods are supported."
         ]
 
-  let private discoverType filePath namespaceName renderType typeDefn =
+  let private discoverType filePath namespaceName openNamespaces renderType typeDefn =
     match typeDefn with
     | SynTypeDefn
         (
@@ -223,6 +233,7 @@ module Discovery =
                     Interfaces = [
                       {
                         Namespace = namespaceName
+                        OpenNamespaces = openNamespaces
                         SourceFile = filePath
                         ServiceName = serviceName
                         EnvironmentName = Naming.environmentName serviceName
@@ -252,6 +263,7 @@ module Discovery =
   let discoverInterfaces (parsedFile: ParsedSourceFile) =
     let textForRange = textInRange parsedFile.Source
     let renderType (synType: SynType) = textForRange synType.Range
+    let openNamespaces = discoverOpenNamespaces parsedFile.Source
 
     match parsedFile.ParseTree with
     | ParsedInput.ImplFile(ParsedImplFileInput(_, _, _, _, modules, _, _, _)) ->
@@ -271,7 +283,7 @@ module Discovery =
                 | SynModuleDecl.Types(typeDefns, _) ->
                     ((innerInterfacesAcc, innerDiagnosticsAcc), typeDefns)
                     ||> List.fold (fun (typeInterfacesAcc, typeDiagnosticsAcc) typeDefn ->
-                      let discovery = discoverType parsedFile.FilePath namespaceName renderType typeDefn
+                      let discovery = discoverType parsedFile.FilePath namespaceName openNamespaces renderType typeDefn
 
                       typeInterfacesAcc @ discovery.Interfaces,
                       typeDiagnosticsAcc @ discovery.Diagnostics)

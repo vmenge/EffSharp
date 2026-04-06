@@ -56,17 +56,18 @@ module ExampleE2E =
           |> Array.map File.ReadAllText
           |> String.concat System.Environment.NewLine
 
-        Expect.stringContains generatedText "type EGreeter =" "the example should generate an EGreeter environment interface"
-        Expect.stringContains generatedText "let greet (arg1: string) : Eff<string, 'e, #EGreeter>" "the example should generate a callable wrapper from the [<Effect>] interface"
+        Expect.stringContains generatedText "type EClock =" "the example should generate an EClock environment interface"
+        Expect.stringContains generatedText "type EFs =" "the example should generate an EFs environment interface"
+        Expect.stringContains generatedText "type ELogger =" "the example should generate an ELogger environment interface"
       }
 
       testTask "example project executes generated wrappers at runtime" {
         let! buildResult = builtExample.Value
         Expect.equal buildResult.ExitCode 0 $"example project should build successfully before runtime verification. Output:{System.Environment.NewLine}{buildResult.Output}"
 
-        let! runResult = runBuiltFunction exampleProject "EffSharp.Examples.Program" "run"
+        let! runResult = runBuiltProject exampleProject
         Expect.equal runResult.ExitCode 0 $"example project should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
-        Expect.stringContains runResult.Output "Hello, Gen." "the example should print the greeting produced through the generated wrapper"
+        Expect.stringContains runResult.Output "file contents are contents" "the example entry point should run the current example program"
       }
 
       testTask "packed package includes the generator assembly and transitive MSBuild assets" {

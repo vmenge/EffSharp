@@ -60,11 +60,7 @@ let main argv =
       try
         let compileInputs =
           readLines compileItemsFile
-          |> List.map (fun fullPath -> {
-            ItemSpec = fullPath
-            FullPath = fullPath
-          })
-          |> List.toArray
+          |> ProjectInputs.ofPaths projectDirectory
 
         let result =
           Generation.run {

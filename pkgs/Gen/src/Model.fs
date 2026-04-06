@@ -32,6 +32,7 @@ type EffectMethod = {
 
 type EffectInterface = {
   Namespace: string option
+  OpenNamespaces: string list
   SourceFile: string
   ServiceName: string
   EnvironmentName: string

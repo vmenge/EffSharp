@@ -1,27 +1,40 @@
 module EffSharp.Examples.Program
 
 open EffSharp.Core
-
-type ConsoleGreeter() =
-  interface IGreeter with
-    member _.Greet(name: string) = $"Hello, {name}."
+open System
 
 type AppEnv() =
-  let greeter = ConsoleGreeter() :> IGreeter
+  interface ELogger with
+    member _.Logger =
+      { new ILogger with
+          member _.info msg = printfn "%s" msg
+      }
 
-  interface EGreeter with
-    member _.Greeter = greeter
+  interface EClock with
+    member _.Clock =
+      { new IClock with
+          member _.now() = DateTime.Now
+      }
 
-let greetingProgram (name: string) : Eff<string, exn, #EGreeter> =
-  EGreeter.greet name
+  interface EFs with
+    member _.Fs =
+      { new IFs with
+          member _.readToString _path = Pure "contents"
+      }
 
-let exampleGreeting () =
-  greetingProgram "Gen"
-  |> Eff.runSync (AppEnv())
 
-let run () =
-  match exampleGreeting () with
-  | Exit.Ok greeting ->
-      greeting
-  | Exit.Err err -> failwithf "expected greeting, got managed error %A" err
-  | Exit.Exn ex -> raise ex
+let program () = eff {
+  let! now = EClock.now ()
+  do! ELogger.info $"starting program at {now}"
+
+  let! contents = EFs.readToString "filepath"
+  do! ELogger.info $"file contents are {contents}"
+
+  return ()
+}
+
+[<EntryPoint>]
+let main _ =
+  program () |> Eff.runSync (AppEnv()) |> ignore
+
+  0

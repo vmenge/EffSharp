@@ -105,6 +105,11 @@ module Emission =
     | None -> ()
 
     appendLine builder "open EffSharp.Core"
+
+    for openNamespace in effectInterface.OpenNamespaces do
+      if openNamespace <> "EffSharp.Core" then
+        appendLine builder $"open {openNamespace}"
+
     appendLine builder ""
     appendLine builder $"type {effectInterface.EnvironmentName} ="
 
