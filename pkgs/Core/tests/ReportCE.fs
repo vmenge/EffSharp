@@ -21,7 +21,7 @@ module ReportCE =
       testTask "let! normalizes Eff errors to Report" {
         let! value =
           effr {
-            let! x = Eff.Err "boom"
+            let! x = Err "boom"
             return x
           }
           |> Eff.runTask ()
@@ -48,7 +48,7 @@ module ReportCE =
       }
 
       testTask "return! normalizes Eff errors to Report" {
-        let! value = effr { return! Eff.Err "boom" } |> Eff.runTask ()
+        let! value = effr { return! Err "boom" } |> Eff.runTask ()
 
         let err: exn = Exit.err value
 
@@ -122,7 +122,7 @@ module ReportCE =
         let! value =
           effr {
             let! x = Ok 1
-            let! y = if x = 1 then Eff.Err "boom" else Eff.Pure 2
+            let! y = if x = 1 then Err "boom" else Pure 2
             return y
           }
           |> Eff.runTask ()
@@ -150,7 +150,7 @@ module ReportCE =
           effr {
             let! x = Ok 1
             let! y = taskResult ()
-            let! z = Eff.Pure 3
+            let! z = Pure 3
             return x + y + z
           }
           |> Eff.runTask ()
@@ -188,7 +188,7 @@ module ReportCE =
 
         let! value =
           effr {
-            let! _ = Eff.Err boom
+            let! _ = Err boom
             return 1
           }
           |> Eff.runTask ()
@@ -215,7 +215,7 @@ module ReportCE =
 
         let! value =
           effr {
-            let! _ = Eff.Err boom
+            let! _ = Err boom
             return 1
           }
           |> Eff.runTask ()

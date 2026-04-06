@@ -4,13 +4,6 @@ open System.Threading.Tasks
 
 module Eff =
   type t<'t> = Eff<'t, unit, unit>
-  let Pure (value: 't) : Eff<'t, 'e, 'env> = Eff.Pure value
-  let Err (err: 'e) : Eff<'t, 'e, 'env> = Eff.Err err
-  let Crash (ex: exn) : Eff<'t, 'e, 'env> = Eff.Crash ex
-  let Suspend (suspend: unit -> Eff<'t, 'e, 'env>) : Eff<'t, 'e, 'env> = Eff.Suspend suspend
-  let Thunk (thunk: unit -> 't) : Eff<'t, 'e, 'env> = Eff.Thunk thunk
-  let Task (tsk: unit -> Task<'t>) : Eff<'t, 'e, 'env> = Eff.Task tsk
-  let Read (read: 'env -> 't) : Eff<'t, 'e, 'env> = Eff.Read read
   let ask () : Eff<'a, 'e, 'a> = Eff.Read id
   let read (f: 'a -> 'b) : Eff<'b, 'e, 'a> = Eff.Read f
   let failw msg = Eff.Err(exn msg)
@@ -179,13 +172,13 @@ module Eff =
     (f: exn -> Eff<'k, 'e, 'env>)
     (eff: Eff<'t, 'e, 'env>)
     : Eff<'t, 'e, 'env> =
-    catch (fun ex -> f ex |> bind (fun _ -> Crash ex)) eff
+    catch (fun ex -> f ex |> bind (fun _ -> Eff.Crash ex)) eff
 
   let orRaise eff : Eff<_, unit, _> =
-    eff |> orElseWith (fun e -> Thunk(fun () -> raise (Report.make e)))
+    eff |> orElseWith (fun e -> Eff.Thunk(fun () -> raise (Report.make e)))
 
   let orRaiseWith f eff : Eff<_, unit, _> =
-    eff |> orElseWith (fun e -> Thunk(fun () -> raise (f e)))
+    eff |> orElseWith (fun e -> Eff.Thunk(fun () -> raise (f e)))
 
   let runTask (env: 'env) (eff: Eff<'t, 'e, 'env>) : Task<Exit<'t, 'e>> =
     let stepper = EffRuntime.RuntimeStepper<'env>(env) :> EffRuntime.Stepper<'env>

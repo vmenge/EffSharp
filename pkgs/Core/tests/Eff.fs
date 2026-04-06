@@ -43,18 +43,18 @@ module Eff =
   let tests =
     testList "Core" [
       testTask "Pure resolves" {
-        let! value = Eff.Pure 5 |> Eff.runTask ()
+        let! value = Pure 5 |> Eff.runTask ()
         Expect.equal value (Exit.Ok 5) "should be equal"
       }
 
       testTask "Err resolves" {
-        let! value = Eff.Err "oh no" |> Eff.runTask ()
+        let! value = Err "oh no" |> Eff.runTask ()
         Expect.equal value (Exit.Err "oh no") "should be equal"
       }
 
       testTask "mapErr maps delayed errors" {
         let! value =
-          Eff.suspend (fun () -> Eff.Err "boom")
+          Eff.suspend (fun () -> Err "boom")
           |> Eff.mapErr exn
           |> Eff.runTask ()
 
@@ -64,8 +64,8 @@ module Eff =
 
       testTask "mapErr maps bound errors" {
         let! value =
-          Eff.Pure 1
-          |> Eff.bind (fun _ -> Eff.Err "boom")
+          Pure 1
+          |> Eff.bind (fun _ -> Err "boom")
           |> Eff.mapErr exn
           |> Eff.runTask ()
 
@@ -89,7 +89,7 @@ module Eff =
       }
 
       testTask "Suspend resolves" {
-        let! value = Eff.suspend (fun () -> Eff.Pure 5) |> Eff.runTask ()
+        let! value = Eff.suspend (fun () -> Pure 5) |> Eff.runTask ()
         Expect.equal value (Exit.Ok 5) "should be equal"
       }
 
@@ -98,7 +98,7 @@ module Eff =
 
         let rec loop n =
           if n = 0 then
-            Eff.Pure 42
+            Pure 42
           else
             Eff.suspend (fun () -> loop (n - 1))
 
@@ -287,7 +287,7 @@ module Eff =
 
         let! value =
           Eff.read (fun (e: {| UserId: int; Name: string |}) -> e.UserId)
-          |> Eff.bind (fun i -> Eff.Pure (i + 1))
+          |> Eff.bind (fun i -> Pure(i + 1))
           |> Eff.map string
           |> Eff.runTask env
 
@@ -296,7 +296,7 @@ module Eff =
 
       testTask "flatten unwraps nested pure" {
         let! value =
-          Eff.Pure(Eff.Pure 42)
+          Pure(Pure 42)
           |> Eff.flatten
           |> Eff.runTask ()
 
@@ -305,7 +305,7 @@ module Eff =
 
       testTask "flatten preserves outer error" {
         let! value =
-          Eff.Err "boom"
+          Err "boom"
           |> Eff.flatten
           |> Eff.runTask ()
 
@@ -314,7 +314,7 @@ module Eff =
 
       testTask "flatten preserves inner error" {
         let! value =
-          Eff.Pure(Eff.Err "boom")
+          Pure(Err "boom")
           |> Eff.flatten
           |> Eff.runTask ()
 
@@ -323,7 +323,7 @@ module Eff =
 
       testTask "flatten runs inner effect in the same ambient environment" {
         let nested : Eff<Eff<int, unit, {| UserId: int |}>, unit, {| UserId: int |}> =
-          Eff.Pure(Eff.read (fun (env: {| UserId: int |}) -> env.UserId))
+          Pure(Eff.read (fun (env: {| UserId: int |}) -> env.UserId))
 
         let! value =
           nested
@@ -398,7 +398,7 @@ module Eff =
       }
 
       testTask "provideFrom preserves inner managed errors" {
-        let inner : Eff<int, string, {| UserId: int |}> = Eff.Err "boom"
+        let inner : Eff<int, string, {| UserId: int |}> = Err "boom"
 
         let! value =
           inner
@@ -425,7 +425,7 @@ module Eff =
 
       testTask "provideFrom projection defects resolve as Exit.Exn" {
         let! value =
-          (Eff.Pure 1 : Eff<int, string, {| UserId: int; Name: string |}>)
+          (Pure 1 : Eff<int, string, {| UserId: int; Name: string |}>)
           |> Eff.provideFrom (fun _ -> failwith "boom")
           |> Eff.runTask {| UserId = 41; Name = "Victor" |}
 
@@ -435,9 +435,9 @@ module Eff =
 
       testTask "provideFrom projection defects are catchable" {
         let! value =
-          (Eff.Pure 1 : Eff<int, string, {| UserId: int; Name: string |}>)
+          (Pure 1 : Eff<int, string, {| UserId: int; Name: string |}>)
           |> Eff.provideFrom (fun _ -> failwith "boom")
-          |> Eff.catch (fun _ -> Eff.Pure 2)
+          |> Eff.catch (fun _ -> Pure 2)
           |> Eff.runTask {| UserId = 41; Name = "Victor" |}
 
         Expect.equal
@@ -495,19 +495,19 @@ module Eff =
       testTask "full usage" {
         let userId =
           Eff.read (fun (e: {| UserId: int; Name: string |}) -> e.UserId)
-          |> Eff.bind (fun i -> Eff.Pure (i + 1))
+          |> Eff.bind (fun i -> Pure(i + 1))
           |> Eff.map string
           |> Eff.map int
 
         let myAsyncVal userId =
           Eff.ofAsync (fun () -> async { return userId })
-          |> Eff.bind (fun x -> Eff.Pure (x + 1))
+          |> Eff.bind (fun x -> Pure(x + 1))
           |> Eff.map string
           |> Eff.map int
 
         let myTaskVal userId =
           Eff.ofTask (fun () -> task { return userId })
-          |> Eff.bind (fun x -> Eff.Pure (x + 1))
+          |> Eff.bind (fun x -> Pure(x + 1))
           |> Eff.map string
           |> Eff.map int
 
@@ -604,7 +604,7 @@ module Eff =
         let mutable seen = ""
 
         let! value =
-          Eff.Err "boom"
+          Err "boom"
           |> Eff.tapErr (fun err ->
             Eff.thunk (fun () -> seen <- $"logged: {err}")
           )
@@ -618,7 +618,7 @@ module Eff =
         let mutable called = false
 
         let! value =
-          Eff.Pure 42
+          Pure 42
           |> Eff.tapErr (fun _ ->
             Eff.thunk (fun () -> called <- true)
           )
@@ -630,8 +630,8 @@ module Eff =
 
       testTask "tapErr handler error overrides the original error" {
         let! value =
-          Eff.Err "boom"
-          |> Eff.tapErr (fun _ -> Eff.Err "handler failed")
+          Err "boom"
+          |> Eff.tapErr (fun _ -> Err "handler failed")
           |> Eff.runTask ()
 
         Expect.equal
@@ -642,7 +642,7 @@ module Eff =
 
       testTask "tapErr handler defect overrides the original error" {
         let! value =
-          Eff.Err "boom"
+          Err "boom"
           |> Eff.tapErr (fun _ -> Eff.thunk (fun () -> failwith "tap failed"))
           |> Eff.runTask ()
 
@@ -657,7 +657,7 @@ module Eff =
       testTask "catch recovers from defects" {
         let! value =
           Eff.thunk (fun () -> failwith "boom")
-          |> Eff.catch (fun ex -> Eff.Pure ex.Message)
+          |> Eff.catch (fun ex -> Pure ex.Message)
           |> Eff.runTask ()
 
         Expect.equal value (Exit.Ok "boom") "should recover from defects"
@@ -665,8 +665,8 @@ module Eff =
 
       testTask "catch does not handle managed errors" {
         let! value =
-          Eff.Err "boom"
-          |> Eff.catch (fun _ -> Eff.Pure "recovered")
+          Err "boom"
+          |> Eff.catch (fun _ -> Pure "recovered")
           |> Eff.runTask ()
 
         Expect.equal value (Exit.Err "boom") "should preserve managed errors"
@@ -702,7 +702,7 @@ module Eff =
         let mutable called = false
 
         let! value =
-          Eff.Err "boom"
+          Err "boom"
           |> Eff.tapExn (fun _ ->
             Eff.thunk (fun () -> called <- true)
           )
@@ -715,7 +715,7 @@ module Eff =
       testTask "tapExn handler error overrides the original defect" {
         let! value =
           Eff.thunk (fun () -> failwith "boom")
-          |> Eff.tapExn (fun _ -> Eff.Err "handler failed")
+          |> Eff.tapExn (fun _ -> Err "handler failed")
           |> Eff.runTask ()
 
         Expect.equal
@@ -744,7 +744,7 @@ module Eff =
         let! value =
           Eff.thunk (fun () -> failwith "boom")
           |> Eff.defer (Eff.thunk (fun () -> cleaned <- true))
-          |> Eff.catch (fun ex -> Eff.Pure ex.Message)
+          |> Eff.catch (fun ex -> Pure ex.Message)
           |> Eff.runTask ()
 
         Expect.equal value (Exit.Ok "boom") "should recover from the defect"
@@ -838,9 +838,9 @@ module Eff =
       testTask "bracket release error overrides success" {
         let! result =
           Eff.bracket
-            (Eff.Pure 42)
-            (fun _ -> Eff.Err "cleanup failed")
-            (fun resource -> Eff.Pure(resource + 1))
+            (Pure 42)
+            (fun _ -> Err "cleanup failed")
+            (fun resource -> Pure(resource + 1))
           |> Eff.runTask ()
 
         Expect.equal
@@ -852,9 +852,9 @@ module Eff =
       testTask "bracket release error overrides body error" {
         let! result =
           Eff.bracket
-            (Eff.Pure 42)
-            (fun _ -> Eff.Err "cleanup failed")
-            (fun _ -> Eff.Err "body failed")
+            (Pure 42)
+            (fun _ -> Err "cleanup failed")
+            (fun _ -> Err "body failed")
           |> Eff.runTask ()
 
         Expect.equal
@@ -865,10 +865,10 @@ module Eff =
 
       testTask "deep bind chains stay stack-safe" {
         let depth = 100_000
-        let mutable program: Eff<int, unit, unit> = Eff.suspend (fun () -> Eff.Pure 0)
+        let mutable program: Eff<int, unit, unit> = Eff.suspend (fun () -> Pure 0)
 
         for _ in 1 .. depth do
-          program <- program |> Eff.bind (fun value -> Eff.Pure(value + 1))
+          program <- program |> Eff.bind (fun value -> Pure(value + 1))
 
         let! value = program |> Eff.runTask ()
         Expect.equal value (Exit.Ok depth) "should resolve deep bind chains"
