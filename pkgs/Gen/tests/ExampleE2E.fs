@@ -42,8 +42,8 @@ module ExampleE2E =
       testTask "example project builds as a Gen consumer in the same build" {
         let projectText = exampleProjectText ()
 
-        Expect.isFalse (projectText.Contains("Gen.props")) "the example should not manually import Gen.props"
-        Expect.isFalse (projectText.Contains("Gen.targets")) "the example should not manually import Gen.targets"
+        Expect.isFalse (projectText.Contains("EffSharp.Gen.props")) "the example should not manually import EffSharp.Gen.props"
+        Expect.isFalse (projectText.Contains("EffSharp.Gen.targets")) "the example should not manually import EffSharp.Gen.targets"
 
         let! result = builtExample.Value
 
@@ -92,7 +92,7 @@ module ExampleE2E =
         let entries = archive.Entries |> Seq.map _.FullName |> Set.ofSeq
 
         Expect.isTrue (entries.Contains("lib/net10.0/Gen.dll")) "the package should include the Gen assembly"
-        Expect.isTrue (entries.Contains("buildTransitive/Gen.props")) "the package should include the transitive props file"
-        Expect.isTrue (entries.Contains("buildTransitive/Gen.targets")) "the package should include the transitive targets file"
+        Expect.isTrue (entries.Contains("buildTransitive/EffSharp.Gen.props")) "the package should include the transitive props file"
+        Expect.isTrue (entries.Contains("buildTransitive/EffSharp.Gen.targets")) "the package should include the transitive targets file"
       }
     ]

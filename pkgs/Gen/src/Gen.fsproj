@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <PackageId>EffSharp.Gen</PackageId>
+    <Version>0.0.1</Version>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
@@ -39,8 +41,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\buildTransitive\Gen.props" Pack="true" PackagePath="buildTransitive\Gen.props" Visible="false" />
-    <None Include="..\buildTransitive\Gen.targets" Pack="true" PackagePath="buildTransitive\Gen.targets" Visible="false" />
+    <None Include="..\buildTransitive\EffSharp.Gen.props" Pack="true" PackagePath="buildTransitive\EffSharp.Gen.props" Visible="false" />
+    <None Include="..\buildTransitive\EffSharp.Gen.targets" Pack="true" PackagePath="buildTransitive\EffSharp.Gen.targets" Visible="false" />
     <None Include="bin\$(Configuration)\$(TargetFramework)\Gen.dll" Pack="true" PackagePath="buildTransitive\$(TargetFramework)\Gen.dll" Visible="false" />
     <None Include="bin\$(Configuration)\$(TargetFramework)\Gen.deps.json" Pack="true" PackagePath="buildTransitive\$(TargetFramework)\Gen.deps.json" Visible="false" />
     <None Include="bin\$(Configuration)\$(TargetFramework)\FSharp.Core.dll" Pack="true" PackagePath="buildTransitive\$(TargetFramework)\FSharp.Core.dll" Visible="false" />

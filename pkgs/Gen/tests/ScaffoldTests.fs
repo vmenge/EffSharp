@@ -29,11 +29,11 @@ module ScaffoldTests =
       )
 
       testCase "buildTransitive asset files exist" (fun () ->
-        let propsPath = Path.Combine(effectGenRoot, "buildTransitive", "Gen.props")
-        let targetsPath = Path.Combine(effectGenRoot, "buildTransitive", "Gen.targets")
+        let propsPath = Path.Combine(effectGenRoot, "buildTransitive", "EffSharp.Gen.props")
+        let targetsPath = Path.Combine(effectGenRoot, "buildTransitive", "EffSharp.Gen.targets")
 
-        Expect.isTrue (File.Exists(propsPath)) "Gen.props should exist for transitive MSBuild wiring"
-        Expect.isTrue (File.Exists(targetsPath)) "Gen.targets should exist for transitive MSBuild wiring"
+        Expect.isTrue (File.Exists(propsPath)) "EffSharp.Gen.props should exist for transitive MSBuild wiring"
+        Expect.isTrue (File.Exists(targetsPath)) "EffSharp.Gen.targets should exist for transitive MSBuild wiring"
       )
 
       testCase "package project includes buildTransitive assets for packing" (fun () ->
