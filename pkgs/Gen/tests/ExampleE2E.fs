@@ -68,7 +68,7 @@ module ExampleE2E =
 
         let! runResult = runBuiltProject exampleProject
         Expect.equal runResult.ExitCode 0 $"example project should run successfully. Output:{System.Environment.NewLine}{runResult.Output}"
-        Expect.stringContains runResult.Output "file contents are contents" "the example entry point should run the current example program"
+        Expect.stringContains runResult.Output "file contents: contents from file" "the example entry point should run the current example program"
       }
 
       testTask "packed package includes the generator assembly and transitive MSBuild assets" {
