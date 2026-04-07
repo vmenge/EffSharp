@@ -24,6 +24,44 @@ module Path =
 
     Expect.equal actual expected ""
 
+  let private expectRoot expected path =
+    let actual = path |> Path.make |> Path.getRoot
+
+    Expect.equal actual expected ""
+
+  let private getRoot =
+    testList "getRoot" [
+      testCase
+        "returns None for a relative path"
+        (fun () -> "a/b" |> expectRoot None)
+
+      testCase
+        "returns None for a dot-relative path"
+        (fun () -> "./a/b" |> expectRoot None)
+
+      testCase
+        "returns root dir for a unix absolute path"
+        (fun () -> "/a/b" |> expectRoot (Some "/"))
+
+      testCase
+        "returns root dir for a rooted path without a prefix"
+        (fun () -> "\\a\\b" |> expectRoot (Some @"\"))
+
+      testCase
+        "returns a drive prefix without the root separator for a drive-relative path"
+        (fun () -> @"C:a\b" |> expectRoot (Some "C:"))
+
+      testCase
+        "returns a drive prefix plus root separator for a fully qualified drive path"
+        (fun () -> @"C:\a\b" |> expectRoot (Some @"C:\"))
+
+      testCase
+        "returns a unc prefix plus root separator for a unc path"
+        (fun () ->
+          @"\\server\share\dir" |> expectRoot (Some @"\\server\share\")
+        )
+    ]
+
   let private isEmpty =
     testList "isEmpty" [
       testCase
@@ -169,4 +207,5 @@ module Path =
         )
     ]
 
-  let tests = testList "Path" [ isEmpty; normalizeLexically; components ]
+  let tests =
+    testList "Path" [ getRoot; isEmpty; normalizeLexically; components ]

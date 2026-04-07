@@ -39,10 +39,35 @@ module Path =
   let isAbsolute (Path p) : bool = Path.IsPathFullyQualified p
   let isRelative (Path p) : bool = not <| Path.IsPathFullyQualified p
 
-  let getRoot (Path p) : string ValueOption =
-    Path.GetPathRoot p
-    |> ValueOption.ofObj
-    |> ValueOption.reject String.isNullOrWhiteSpace
+  let getRoot (Path p) : string option =
+    let isDrive (p: string) =
+      let firstIsChar = p |> Seq.tryItem 0 |> Option.exists Char.IsAsciiLetter
+      let sndIsColon = p |> Seq.tryItem 1 |> Option.exists ((=) ':')
+      firstIsChar && sndIsColon
+
+    match p with
+    | _ when String.startsWith "/" p -> Some "/"
+    | _ when String.startsWith "\\\\server" p ->
+      p
+      |> String.splitOnce "\\\\server\\"
+      |> Option.map snd
+      |> Option.bind (String.splitOnce "\\")
+      |> Option.map fst
+      |> Option.map (fun rest -> $"\\\\server\\{rest}\\")
+
+    | _ when String.startsWith "\\\\" p -> Some "\\"
+
+    | _ when String.startsWith "\\" p -> Some "\\"
+
+    | _ when isDrive p ->
+      let subStrLen =
+        match Seq.tryItem 2 p with
+        | Some '\\' -> 3
+        | _ -> 2
+
+      String.substring 0 subStrLen p
+
+    | _ -> None
 
   let isEmpty (Path p) : bool = String.len p = 0
 
@@ -56,21 +81,16 @@ module Path =
       let root = getRoot p
 
       let tail =
-        match root with
-        | ValueSome root -> String.substringFrom (String.len root) str
-        | ValueNone -> str
+        root
+        |> Option.bind (fun root -> String.substringFrom (String.len root) str)
+        |> Option.defaultValue str
 
-      let segments =
-        tail
-        |> String.splitBy [|
-          System.IO.Path.DirectorySeparatorChar
-          System.IO.Path.AltDirectorySeparatorChar
-        |]
+      let segments = tail |> String.splitBy [| '\\'; '/' |]
 
       let normalized = ResizeArray<PathComponent>()
 
       root
-      |> ValueOption.iter (fun root ->
+      |> Option.iter (fun root ->
         if root <> "/" && root <> @"\" then
           normalized.Add(Prefix root)
 
@@ -102,16 +122,11 @@ module Path =
       let root = getRoot p
 
       let tail =
-        match root with
-        | ValueSome root -> String.substringFrom (String.len root) str
-        | ValueNone -> str
+        root
+        |> Option.bind (fun root -> String.substringFrom (String.len root) str)
+        |> Option.defaultValue str
 
-      let segments =
-        tail
-        |> String.splitBy [|
-          System.IO.Path.DirectorySeparatorChar
-          System.IO.Path.AltDirectorySeparatorChar
-        |]
+      let segments = tail |> String.splitBy [| '\\'; '/' |]
 
       let normalized = ResizeArray<string>()
 
@@ -133,8 +148,8 @@ module Path =
 
       let path =
         match root with
-        | ValueSome root -> root + joined
-        | ValueNone -> if String.len joined > 0 then joined else "."
+        | Some root -> root + joined
+        | None -> if String.len joined > 0 then joined else "."
 
       if String.startsWith ".." path && isRelative then
         "Relative paths cannot start with '..'" |> NormalizeErr |> Error
