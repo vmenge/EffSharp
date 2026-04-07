@@ -51,7 +51,7 @@ module SupportedEffExactE2E =
           |> String.concat System.Environment.NewLine
 
         Expect.stringContains generatedText "type IRuntime with" "IRuntime should produce a type extension on the source interface"
-        Expect.stringContains generatedText "static member spawn (arg1: SupportedEffExactRed.Job) : EffSharp.Core.Eff<SupportedEffExactRed.JobHandle<SupportedEffExactRed.JobResult>, SupportedEffExactRed.SpawnError, #IRuntime>" "Eff-returning members should preserve the concrete success and error types"
+        Expect.stringContains generatedText "static member Spawn (arg1: SupportedEffExactRed.Job) : EffSharp.Core.Eff<SupportedEffExactRed.JobHandle<SupportedEffExactRed.JobResult>, SupportedEffExactRed.SpawnError, #IRuntime>" "Eff-returning members should preserve the concrete success and error types without rewriting the member name"
         Expect.stringContains generatedText "|> Eff.flatten" "Exact Eff returns should flatten the nested Eff value"
         Expect.isFalse (generatedText.Contains("type ERuntime =")) "direct generation should not emit wrapper environment interfaces by default"
       }

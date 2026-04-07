@@ -14,6 +14,7 @@ let main argv =
           RedE2E.tests
           ParseOptionsE2E.tests
           ModeCoverageE2E.tests
+          LifecycleE2E.tests
           SupportedSyncE2E.tests
           SupportedAsyncE2E.tests
           QualifiedReturnTypesE2E.tests

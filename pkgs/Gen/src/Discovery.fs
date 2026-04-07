@@ -28,6 +28,11 @@ module Discovery =
   let private joinLongIdent (idents: Ident list) =
     idents |> List.map _.idText |> String.concat "."
 
+  let private qualifyTypeName namespaceName serviceName =
+    match namespaceName with
+    | Some namespaceValue -> $"{namespaceValue}.{serviceName}"
+    | None -> serviceName
+
   let private joinSynLongIdent (SynLongIdent(idents, _, _)) = joinLongIdent idents
 
   let private hasAttributeName expectedShortName expectedAttributeName (name: string) =
@@ -202,6 +207,7 @@ module Discovery =
         let serviceName = longId |> List.last |> _.idText
         let typeName = longId |> List.last
         let mode = effectMode attributes
+        let qualifiedServiceTypeName = qualifyTypeName namespaceName serviceName
 
         match representation with
         | SynTypeDefnRepr.ObjectModel(_, members, _) when isInterfaceRepresentation attributes representation ->
@@ -235,8 +241,8 @@ module Discovery =
                            && environmentType <> $"#{Naming.environmentName mode serviceName}"
                            && environmentType <> serviceName
                            && environmentType <> $"#{serviceName}"
-                           && environmentType <> joinLongIdent longId
-                           && environmentType <> $"#{joinLongIdent longId}" ->
+                           && environmentType <> qualifiedServiceTypeName
+                           && environmentType <> $"#{qualifiedServiceTypeName}" ->
                         Some environmentType
                     | _ -> None)
                   |> List.distinct
@@ -249,7 +255,7 @@ module Discovery =
                         SourceFile = parsedFile.FilePath
                         Mode = mode
                         ServiceName = serviceName
-                        ServiceTypeName = joinLongIdent longId
+                        ServiceTypeName = qualifiedServiceTypeName
                         EnvironmentName = Naming.environmentName mode serviceName
                         PropertyName = Naming.propertyName serviceName
                         DeclarationLine = typeName.idRange.StartLine

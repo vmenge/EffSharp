@@ -56,9 +56,9 @@ module ExampleE2E =
           |> Array.map File.ReadAllText
           |> String.concat System.Environment.NewLine
 
-        Expect.stringContains generatedText "type IClock with" "the example should generate callable extensions for IClock"
-        Expect.stringContains generatedText "type IFs with" "the example should generate callable extensions for IFs"
-        Expect.stringContains generatedText "type ILogger with" "the example should generate callable extensions for ILogger"
+        Expect.stringContains generatedText "type Clock with" "the example should generate callable extensions for Clock"
+        Expect.stringContains generatedText "type Fs with" "the example should generate callable extensions for Fs"
+        Expect.stringContains generatedText "type Log with" "the example should generate callable extensions for Log"
         Expect.isFalse (generatedText.Contains("type EClock =")) "default direct generation should not emit wrapper interfaces for the example"
       }
 

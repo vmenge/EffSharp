@@ -60,11 +60,11 @@ module SupportedSyncE2E =
           |> String.concat System.Environment.NewLine
 
         Expect.stringContains generatedText "type ILogger with" "ILogger should produce a type extension on the source interface"
-        Expect.stringContains generatedText "static member debug (arg1: string) : EffSharp.Core.Eff<unit, 'e, #ILogger>" "plain unit return should stay generic over the error channel"
+        Expect.stringContains generatedText "static member Debug (arg1: string) : EffSharp.Core.Eff<unit, 'e, #ILogger>" "plain unit return should stay generic over the error channel without rewriting the member name"
         Expect.stringContains generatedText "type IParser with" "IParser should produce a type extension on the source interface"
-        Expect.stringContains generatedText "static member parse (arg1: string) : EffSharp.Core.Eff<int, SupportedSyncRed.ParseError, #IParser>" "Result-returning members should produce the concrete error channel"
+        Expect.stringContains generatedText "static member Parse (arg1: string) : EffSharp.Core.Eff<int, SupportedSyncRed.ParseError, #IParser>" "Result-returning members should produce the concrete error channel without rewriting the member name"
         Expect.stringContains generatedText "|> Eff.bind Eff.ofResult" "Result-returning members should normalize through Eff.ofResult"
-        Expect.stringContains generatedText "static member tryFind (arg1: int, arg2: string) : EffSharp.Core.Eff<SupportedSyncRed.User, SupportedSyncRed.LookupError, #ILookup>" "tupled members should preserve the tuple structure in the generated wrapper"
+        Expect.stringContains generatedText "static member TryFind (arg1: int, arg2: string) : EffSharp.Core.Eff<SupportedSyncRed.User, SupportedSyncRed.LookupError, #ILookup>" "tupled members should preserve the tuple structure in the generated wrapper without rewriting the member name"
         Expect.isFalse (generatedText.Contains("type ELogger =")) "direct generation should not emit wrapper environment interfaces by default"
       }
 

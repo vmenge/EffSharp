@@ -5,6 +5,24 @@ open System.Text
 module Emission =
   let private appendLine (builder: StringBuilder) (line: string) = builder.AppendLine(line) |> ignore
 
+  let private emitWrappedContract builder effectInterface =
+    let effectNamespace =
+      match effectInterface.Namespace with
+      | Some namespaceName -> $"{namespaceName}.Effect"
+      | None -> "Effect"
+
+    appendLine builder $"namespace {effectNamespace}"
+    appendLine builder ""
+    appendLine builder $"type {effectInterface.PropertyName} ="
+
+    for inheritedEnvironment in effectInterface.InheritedEnvironments do
+      appendLine builder $"  inherit {inheritedEnvironment}"
+
+    if effectInterface.InheritedEnvironments.IsEmpty then
+      appendLine builder $"  abstract {effectInterface.PropertyName}: {effectInterface.ServiceTypeName}"
+
+    appendLine builder ""
+
   let private parameterList parameterGroups =
     parameterGroups
     |> List.collect (function
@@ -108,6 +126,9 @@ module Emission =
   let emitFile effectInterface =
     let builder = StringBuilder()
 
+    if effectInterface.Mode = Mode.Wrap then
+      emitWrappedContract builder effectInterface
+
     match effectInterface.Namespace with
     | Some namespaceName ->
         appendLine builder $"namespace {namespaceName}"
@@ -115,16 +136,6 @@ module Emission =
     | None -> ()
 
     appendLine builder "open EffSharp.Core"
-
-    if effectInterface.Mode = Mode.Wrap then
-      appendLine builder ""
-      appendLine builder $"type {effectInterface.EnvironmentName} ="
-
-      if effectInterface.InheritedEnvironments.IsEmpty then
-        appendLine builder $"  abstract {effectInterface.PropertyName}: {effectInterface.ServiceTypeName}"
-      else
-        for inheritedEnvironment in effectInterface.InheritedEnvironments do
-          appendLine builder $"  inherit {inheritedEnvironment}"
 
     appendLine builder ""
     appendLine builder "[<AutoOpen>]"

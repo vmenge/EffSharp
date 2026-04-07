@@ -9,7 +9,9 @@ module Naming =
     else
       name
 
-  let wrappedEnvironmentName serviceName = $"E{stripInterfacePrefix serviceName}"
+  let wrappedTypeName serviceName = stripInterfacePrefix serviceName
+
+  let wrappedEnvironmentName serviceName = $"Effect.{wrappedTypeName serviceName}"
 
   let environmentName mode serviceName =
     if mode = Mode.Wrap then
@@ -17,10 +19,6 @@ module Naming =
     else
       serviceName
 
-  let propertyName serviceName = stripInterfacePrefix serviceName
+  let propertyName serviceName = wrappedTypeName serviceName
 
-  let wrapperName (memberName: string) =
-    if String.IsNullOrEmpty(memberName) then
-      memberName
-    else
-      $"{Char.ToLowerInvariant(memberName[0])}{memberName.Substring(1)}"
+  let wrapperName (memberName: string) = memberName

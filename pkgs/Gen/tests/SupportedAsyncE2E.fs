@@ -52,13 +52,13 @@ module SupportedAsyncE2E =
           |> String.concat System.Environment.NewLine
 
         Expect.stringContains generatedText "type IHttp with" "IHttp should produce a type extension on the source interface"
-        Expect.stringContains generatedText "static member fetch (arg1: string) : EffSharp.Core.Eff<SupportedAsyncRed.Response, 'e, #IHttp>" "Task-returning members should remain generic over the error channel"
+        Expect.stringContains generatedText "static member Fetch (arg1: string) : EffSharp.Core.Eff<SupportedAsyncRed.Response, 'e, #IHttp>" "Task-returning members should remain generic over the error channel without rewriting the member name"
         Expect.stringContains generatedText "|> Eff.bind (fun taskValue -> Eff.ofTask (fun () -> taskValue))" "Task-returning members should normalize through Eff.ofTask"
-        Expect.stringContains generatedText "static member tryFetch (arg1: string) : EffSharp.Core.Eff<SupportedAsyncRed.Response, SupportedAsyncRed.HttpError, #IHttp>" "Task<Result<_,_>> should produce the concrete error channel"
+        Expect.stringContains generatedText "static member TryFetch (arg1: string) : EffSharp.Core.Eff<SupportedAsyncRed.Response, SupportedAsyncRed.HttpError, #IHttp>" "Task<Result<_,_>> should produce the concrete error channel without rewriting the member name"
         Expect.stringContains generatedText "|> Eff.bind Eff.ofResult" "Task<Result<_,_>> should finish by binding Eff.ofResult"
-        Expect.stringContains generatedText "static member load (arg1: string) : EffSharp.Core.Eff<SupportedAsyncRed.Model, 'e, #IStore>" "Async-returning members should remain generic over the error channel"
+        Expect.stringContains generatedText "static member Load (arg1: string) : EffSharp.Core.Eff<SupportedAsyncRed.Model, 'e, #IStore>" "Async-returning members should remain generic over the error channel without rewriting the member name"
         Expect.stringContains generatedText "|> Eff.bind (fun asyncValue -> Eff.ofAsync (fun () -> asyncValue))" "Async-returning members should normalize through Eff.ofAsync"
-        Expect.stringContains generatedText "static member read (arg1: string) : EffSharp.Core.Eff<string, 'e, #IFileSystem>" "ValueTask-returning members should remain generic over the error channel"
+        Expect.stringContains generatedText "static member Read (arg1: string) : EffSharp.Core.Eff<string, 'e, #IFileSystem>" "ValueTask-returning members should remain generic over the error channel without rewriting the member name"
         Expect.stringContains generatedText "|> Eff.bind (fun valueTaskValue -> Eff.ofValueTask (fun () -> valueTaskValue))" "ValueTask-returning members should normalize through Eff.ofValueTask"
         Expect.isFalse (generatedText.Contains("type EHttp =")) "direct generation should not emit wrapper environment interfaces by default"
       }

@@ -25,13 +25,13 @@ type OddLoggerService() =
       messages <- message :: messages
 
 type AppEnv(greeter: IGreeter, logger: Logger, oddLogger: Ilogger) =
-  interface EGreeter with
+  interface Effect.Greeter with
     member _.Greeter = greeter
 
-  interface ELogger with
+  interface Effect.Logger with
     member _.Logger = logger
 
-  interface EIlogger with
+  interface Effect.Ilogger with
     member _.Ilogger = oddLogger
 
 let private expectOk expected exit name =

@@ -60,7 +60,7 @@ module DiagnosticsE2E =
       }
 
       testTask "duplicate generated names fail with a precise diagnostic" {
-        do! assertGeneratorDiagnostic "DuplicateGeneratedNames" [ "EFFGEN005"; "ELogger"; "Logger"; "ILogger"; "Logger" ]
+        do! assertGeneratorDiagnostic "DuplicateGeneratedNames" [ "EFFGEN005"; "Effect.Logger"; "Logger"; "ILogger" ]
       }
 
       testTask "invalid source form fails with a precise diagnostic" {

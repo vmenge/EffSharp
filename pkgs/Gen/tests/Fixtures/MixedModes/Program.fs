@@ -19,7 +19,7 @@ type AppEnv(logger: ILogger, clock: IClock) =
   interface ILogger with
     member _.Info(message: string) = logger.Info(message)
 
-  interface EClock with
+  interface Effect.Clock with
     member _.Clock = clock
 
 let private expectOk expected exit name =

@@ -44,7 +44,7 @@ module RegressionE2E =
 
         Expect.isFalse (generatedText.Contains("open System")) "generated files should not depend on copied source open directives"
         Expect.stringContains generatedText "type IClock with" "generated callable extensions should target the source interface"
-        Expect.stringContains generatedText "static member now () : EffSharp.Core.Eff<System.DateTime, 'e, #IClock>" "generated members should use fully qualified return types"
+        Expect.stringContains generatedText "static member now () : EffSharp.Core.Eff<System.DateTime, 'e, #IClock>" "generated members should use fully qualified return types without rewriting the member name"
       }
 
       testTask "source-mode compile ordering keeps the entry-point file last" {

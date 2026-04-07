@@ -44,7 +44,7 @@ module ParseOptionsE2E =
           |> String.concat System.Environment.NewLine
 
         Expect.stringContains generatedText "type IGreeter with" "conditional [<Effect>] declarations enabled by the project defines should still be discovered"
-        Expect.stringContains generatedText "static member greet (arg1: string) : EffSharp.Core.Eff<string, 'e, #IGreeter>" "default [<Effect>] interfaces should generate callable type extensions against the tagged interface"
+        Expect.stringContains generatedText "static member Greet (arg1: string) : EffSharp.Core.Eff<string, 'e, #IGreeter>" "default [<Effect>] interfaces should generate callable type extensions against the tagged interface without rewriting the member name"
         Expect.isFalse (generatedText.Contains("type EGreeter =")) "default direct generation should not synthesize a wrapper environment interface"
       }
     ]

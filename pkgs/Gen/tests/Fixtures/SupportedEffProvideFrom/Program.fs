@@ -13,7 +13,7 @@ type RuntimeService() =
         })
 
 type AppEnv(runtimeService: IRuntimeService) =
-  interface ERuntimeService with
+  interface Effect.RuntimeService with
     member _.RuntimeService = runtimeService
 
 let run () =

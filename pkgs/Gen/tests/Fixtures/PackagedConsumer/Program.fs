@@ -15,7 +15,7 @@ type AppEnv() =
 
 let run () =
   let result =
-    IGreeter.greet "packaged consumer"
+    IGreeter.Greet "packaged consumer"
     |> Eff.runSync (AppEnv())
 
   match result with

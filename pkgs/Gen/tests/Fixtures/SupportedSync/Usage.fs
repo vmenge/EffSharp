@@ -3,7 +3,7 @@ namespace SupportedSyncRed
 open EffSharp.Core
 
 module Usage =
-  let logProgram () : Eff<unit, exn, #ILogger> = ILogger.debug "hello"
-  let clockProgram () : Eff<string, exn, #IClock> = IClock.now ()
-  let parserProgram () : Eff<int, ParseError, #IParser> = IParser.parse "42"
-  let lookupProgram () : Eff<User, LookupError, #ILookup> = ILookup.tryFind (1, "user")
+  let logProgram () : Eff<unit, exn, #ILogger> = ILogger.Debug "hello"
+  let clockProgram () : Eff<string, exn, #IClock> = IClock.Now ()
+  let parserProgram () : Eff<int, ParseError, #IParser> = IParser.Parse "42"
+  let lookupProgram () : Eff<User, LookupError, #ILookup> = ILookup.TryFind (1, "user")
