@@ -43,6 +43,8 @@ module Path =
     UnixSeparator
 #endif
 
+  /// Returns the prefix (e.g. drive letter or UNC share) and root separator
+  /// for the given path. Either or both may be None.
   let getPrefixAndRoot (Path p) : string option * string option =
     let isDrive (p: string) =
       let firstIsChar = p |> String.item 0 |> Option.exists Char.IsAsciiLetter
@@ -125,13 +127,20 @@ module Path =
       |> Path
     )
 
+  /// Returns true if the path has a root separator.
   let isAbsolute p = getPrefixAndRoot p |> snd |> Option.isSome
+  /// Returns true if the path has no root separator.
   let isRelative p = getPrefixAndRoot p |> snd |> Option.isNone
 
+  /// Returns true if the path is the empty string.
   let isEmpty (Path p) : bool = String.len p = 0
 
+  /// Returns the length of the underlying string.
   let len (Path p) = String.len p
 
+  /// Decomposes the path into its logical components without resolving
+  /// dot-dot segments. Interior dot segments and repeated separators
+  /// are normalized away.
   let components (p: Path) : PathComponent seq =
     if isEmpty p then
       Seq.empty
@@ -161,8 +170,9 @@ module Path =
 
       normalized
 
-  /// Normalize a path, including .. without traversing the filesystem.
-  /// Returns an error if normalization would leave leading .. components.
+  /// Normalizes the path lexically using the given separator, collapsing
+  /// dot and dot-dot segments without accessing the filesystem.
+  /// Returns an error if normalization would leave leading dot-dot components.
   let normalizeLexicallyWith
     (separator: char)
     (p: Path)
@@ -210,6 +220,10 @@ module Path =
       else
         Ok(Path path)
 
+  /// Normalizes the path lexically, collapsing dot and dot-dot segments
+  /// without accessing the filesystem. Uses a separator chosen at compile
+  /// time based on the target OS.
+  /// Returns an error if normalization would leave leading dot-dot components.
   let normalizeLexically = normalizeLexicallyWith Separator
 
   let endsWith (str: string) (Path p) : bool = failwith "todo"
