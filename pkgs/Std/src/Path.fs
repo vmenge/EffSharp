@@ -141,9 +141,9 @@ module Path =
   /// Decomposes the path into its logical components without resolving
   /// dot-dot segments. Interior dot segments and repeated separators
   /// are normalized away.
-  let components (p: Path) : PathComponent seq =
+  let components (p: Path) : PathComponent Vec =
     if isEmpty p then
-      Seq.empty
+      Vec()
     else
       let prefix, root, tail = prefixRootTail p
 
@@ -252,8 +252,16 @@ module Path =
   /// Appends the given extension to the path, separated by a dot.
   let withExtension (ext: string) (Path p) : Path = Path $"{p}.{ext}"
 
-  let fileName (Path p) : string Option = failwith "todo"
-  let withFileName (ext: string) (Path p) : Path = failwith "todo"
+  /// Returns the final component of the path if it is a normal segment.
+  /// Returns None if the path is empty, a root, or ends with `..`.
+  let fileName p : string Option =
+    components p
+    |> Vec.last
+    |> Option.bind (
+      function
+      | Normal v -> Some v
+      | _ -> None
+    )
 
   let stripPrefix (prefix: Path) (Path p) : Result<Path, PathErr> =
     failwith "todo"

@@ -394,6 +394,63 @@ module Path =
         )
     ]
 
+  let private expectFileName expected path =
+    let actual = path |> Path.make |> Path.fileName
+    Expect.equal actual expected ""
+
+  let private fileName =
+    testList "fileName" [
+      testCase
+        "returns the file name for a simple path"
+        (fun () -> "foo.txt" |> expectFileName (Some "foo.txt"))
+
+      testCase
+        "returns the file name for a nested path"
+        (fun () -> "a/b/foo.txt" |> expectFileName (Some "foo.txt"))
+
+      testCase
+        "returns the directory name for a trailing separator"
+        (fun () -> "/usr/bin/" |> expectFileName (Some "bin"))
+
+      testCase
+        "returns the file name when path ends with dot"
+        (fun () -> "foo.txt/." |> expectFileName (Some "foo.txt"))
+
+      testCase
+        "returns the file name when path ends with dot and trailing separators"
+        (fun () -> "foo.txt/.//" |> expectFileName (Some "foo.txt"))
+
+      testCase
+        "returns None when path ends with dot-dot"
+        (fun () -> "foo.txt/.." |> expectFileName None)
+
+      testCase "returns None for root" (fun () -> "/" |> expectFileName None)
+
+      testCase
+        "returns None for an empty path"
+        (fun () -> "" |> expectFileName None)
+
+      testCase
+        "returns the name for a single component"
+        (fun () -> "foo" |> expectFileName (Some "foo"))
+
+      testCase
+        "returns None for a windows drive root"
+        (fun () -> @"C:\" |> expectFileName None)
+
+      testCase
+        "returns the file name for a windows path"
+        (fun () -> @"C:\a\b.txt" |> expectFileName (Some "b.txt"))
+
+      testCase
+        "returns None for dot-dot only"
+        (fun () -> ".." |> expectFileName None)
+
+      testCase
+        "returns the name for a dotfile"
+        (fun () -> ".gitignore" |> expectFileName (Some ".gitignore"))
+    ]
+
   let tests =
     testList "Path" [
       getPrefixAndRoot
@@ -403,4 +460,5 @@ module Path =
       parent
       extension
       withExtension
+      fileName
     ]
