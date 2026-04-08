@@ -42,6 +42,27 @@ module String =
 
       Some(left, right)
 
+  /// Splits the string on the first occurrence of any of the given separators.
+  /// Returns a tuple of the part before and after the separator, or None if not found.
+  let splitOnceOf
+    (separators: string array)
+    (str: string)
+    : (string * string) option =
+    let mutable bestIdx = -1
+    let mutable bestLen = 0
+
+    for sep in separators do
+      let i = str.IndexOf(sep)
+
+      if i >= 0 && (bestIdx < 0 || i < bestIdx) then
+        bestIdx <- i
+        bestLen <- sep.Length
+
+    if bestIdx < 0 then
+      None
+    else
+      Some(str.Substring(0, bestIdx), str.Substring(bestIdx + bestLen))
+
   /// Splits the string on the last occurrence of the separator.
   /// Returns a tuple of the part before and after the separator, or None if not found.
   let revSplitOnce

@@ -108,6 +108,51 @@ module String =
         )
     ]
 
+  let private splitOnceOf =
+    testList "splitOnceOf" [
+      testCase
+        "splits on the first occurrence among multiple separators"
+        (fun () ->
+          let result = String.splitOnceOf [| "/"; "\\" |] "a/b\\c"
+          Expect.equal result (Some("a", "b\\c")) ""
+        )
+
+      testCase
+        "returns None when no separator is found"
+        (fun () ->
+          let result = String.splitOnceOf [| "/"; "\\" |] "abc"
+          Expect.equal result None ""
+        )
+
+      testCase
+        "picks the leftmost match when separators appear at different positions"
+        (fun () ->
+          let result = String.splitOnceOf [| "."; "/" |] "a.b/c"
+          Expect.equal result (Some("a", "b/c")) ""
+        )
+
+      testCase
+        "handles a multi-character separator"
+        (fun () ->
+          let result = String.splitOnceOf [| "::" |] "a::b::c"
+          Expect.equal result (Some("a", "b::c")) ""
+        )
+
+      testCase
+        "returns None for an empty input"
+        (fun () ->
+          let result = String.splitOnceOf [| "/" |] ""
+          Expect.equal result None ""
+        )
+
+      testCase
+        "returns None for an empty separators array"
+        (fun () ->
+          let result = String.splitOnceOf [||] "a/b"
+          Expect.equal result None ""
+        )
+    ]
+
   let private revSplitOnceOf =
     testList "revSplitOnceOf" [
       testCase
@@ -153,4 +198,4 @@ module String =
         )
     ]
 
-  let tests = testList "String" [ splitOnce; revSplitOnce; revSplitOnceOf ]
+  let tests = testList "String" [ splitOnce; splitOnceOf; revSplitOnce; revSplitOnceOf ]
