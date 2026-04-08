@@ -5,7 +5,9 @@ open EffSharp.Std
 
 module Path =
   let private normalize path = Path.make path |> Path.normalizeLexically
-  let private normalizeWith sep path = Path.make path |> Path.normalizeLexicallyWith sep
+
+  let private normalizeWith sep path =
+    Path.make path |> Path.normalizeLexicallyWith sep
 
   let private expectNormalized expected actual =
     match actual with
@@ -145,7 +147,9 @@ module Path =
 
       testCase
         "treats a malformed unc-like path as rooted when normalizing lexically"
-        (fun () -> normalizeWith '\\' @"\\server\..\x" |> expectNormalized @"\x")
+        (fun () ->
+          normalizeWith '\\' @"\\server\..\x" |> expectNormalized @"\x"
+        )
 
       testCase
         "windows rooted but not fully qualified paths should not preserve rooted-only semantics"
@@ -244,9 +248,7 @@ module Path =
         "returns None for an empty path"
         (fun () -> "" |> expectParent None)
 
-      testCase
-        "returns None for root"
-        (fun () -> "/" |> expectParent None)
+      testCase "returns None for root" (fun () -> "/" |> expectParent None)
 
       testCase
         "returns Some root for a file under root"
@@ -278,7 +280,9 @@ module Path =
 
       testCase
         "returns the unc root for a file under a unc share"
-        (fun () -> @"\\server\share\a" |> expectParent (Some @"\\server\share\"))
+        (fun () ->
+          @"\\server\share\a" |> expectParent (Some @"\\server\share\")
+        )
 
       testCase
         "returns None for double slash"
@@ -305,6 +309,91 @@ module Path =
         (fun () -> " " |> expectParent (Some ""))
     ]
 
+  let private expectExtension expected path =
+    let actual = path |> Path.make |> Path.extension
+    Expect.equal actual expected ""
+
+  let private extension =
+    testList "extension" [
+      testCase
+        "returns the extension for a simple file"
+        (fun () -> "foo.txt" |> expectExtension (Some "txt"))
+
+      testCase
+        "returns the last extension for a double extension"
+        (fun () -> "foo.tar.gz" |> expectExtension (Some "gz"))
+
+      testCase
+        "returns the extension for a file in a directory"
+        (fun () -> "a/b/foo.txt" |> expectExtension (Some "txt"))
+
+      testCase
+        "returns None for a file without an extension"
+        (fun () -> "foo" |> expectExtension None)
+
+      testCase
+        "returns None for a directory path without an extension"
+        (fun () -> "a/b/c" |> expectExtension None)
+
+      testCase
+        "returns None for a dotfile"
+        (fun () -> ".gitignore" |> expectExtension None)
+
+      testCase
+        "returns the extension for a dotfile with an extension"
+        (fun () -> ".foo.txt" |> expectExtension (Some "txt"))
+
+      testCase
+        "returns None for an empty path"
+        (fun () -> "" |> expectExtension None)
+
+      testCase
+        "returns None when dot is in a parent directory but not the file"
+        (fun () -> "a.b/c" |> expectExtension None)
+
+      testCase
+        "returns the extension for a windows-style path"
+        (fun () -> @"C:\a\b.txt" |> expectExtension (Some "txt"))
+
+      testCase
+        "returns Some empty for a path ending with a dot"
+        (fun () -> "foo." |> expectExtension (Some ""))
+
+      testCase
+        "returns None for a trailing-separator path"
+        (fun () -> "a/b.txt/" |> expectExtension None)
+    ]
+
+  let private withExtension =
+    testList "withExtension" [
+      testCase
+        "appends an extension to a simple path"
+        (fun () ->
+          let result =
+            Path.make "foo" |> Path.withExtension "txt" |> Path.toString
+
+          Expect.equal result "foo.txt" ""
+        )
+
+      testCase
+        "appends an extension to a path that already has one"
+        (fun () ->
+          let result =
+            Path.make "foo.tar" |> Path.withExtension "gz" |> Path.toString
+
+          Expect.equal result "foo.tar.gz" ""
+        )
+
+      testCase
+        "appends an extension to a nested path"
+        (fun () ->
+          let result =
+            Path.make "a/b/foo" |> Path.withExtension "txt" |> Path.toString
+
+          Expect.equal result "a/b/foo.txt" ""
+        )
+    ]
+
   let tests =
     testList "Path" [
       getPrefixAndRoot
@@ -312,4 +401,6 @@ module Path =
       normalizeLexically
       components
       parent
+      extension
+      withExtension
     ]

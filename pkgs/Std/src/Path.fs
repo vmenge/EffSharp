@@ -226,11 +226,31 @@ module Path =
   /// Returns an error if normalization would leave leading dot-dot components.
   let normalizeLexically = normalizeLexicallyWith Separator
 
-  let endsWith (str: string) (Path p) : bool = failwith "todo"
-  let startsWith (str: string) (Path p) : bool = failwith "todo"
+  /// Returns true if the path string ends with the given value.
+  let endsWith (str: string) (Path p) : bool = String.endsWith str p
 
-  let extension (Path p) : string Option = failwith "todo"
-  let withExtension (ext: string) (Path p) : Path = failwith "todo"
+  /// Returns true if the path string starts with the given value.
+  let startsWith (str: string) (Path p) : bool = String.startsWith str p
+
+  /// Returns the file extension of the last component, without the leading dot.
+  /// Returns None if there is no extension.
+  let extension p : string Option =
+    let _, _, tail = prefixRootTail p
+
+    tail
+    |> String.revSplitOnceOf [| string WindowsSeparator; string UnixSeparator |]
+    |> Option.map snd
+    |> Option.defaultValue tail
+    |> String.revSplitOnce "."
+    |> Option.bind (fun (preDot, postDot) ->
+      if String.isNullOrWhiteSpace preDot then
+        None
+      else
+        Some postDot
+    )
+
+  /// Appends the given extension to the path, separated by a dot.
+  let withExtension (ext: string) (Path p) : Path = Path $"{p}.{ext}"
 
   let fileName (Path p) : string Option = failwith "todo"
   let withFileName (ext: string) (Path p) : Path = failwith "todo"

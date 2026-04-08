@@ -114,7 +114,10 @@ module String =
     String.Join(separator, values)
 
   /// Returns true if the string starts with the given value.
-  let startsWith (value: string) (str: string) = str.StartsWith(value)
+  let startsWith (value: string) (str: string) = str.StartsWith value
+
+  /// Returns true if the string ends with the given value.
+  let endsWith (value: string) (str: string) = str.EndsWith value
 
   let item (i: int) (str: string) : char option =
     if i >= 0 && i < str.Length then Some str[i] else None
