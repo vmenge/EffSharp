@@ -13,6 +13,11 @@ module Option =
     | Some x, Some y, Some z -> Some(x, y, z)
     | _ -> None
 
+  let unzip o =
+    match o with
+    | Some(a, b) -> Some a, Some b
+    | None -> None, None
+
   let tap f o1 =
     match o1 with
     | Some v ->

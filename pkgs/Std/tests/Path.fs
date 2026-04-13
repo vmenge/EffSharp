@@ -71,6 +71,13 @@ module Path =
       testCase
         "treats a malformed unc-like path with an empty share as a rooted path without a prefix"
         (fun () -> @"\\server\" |> expectPrefixAndRoot (None, Some @"\"))
+
+      testCase
+        "identifies a unc prefix even without rootdir"
+        (fun () ->
+          @"\\server\share"
+          |> expectPrefixAndRoot (Some "\\\\server\share", Some "\\")
+        )
     ]
 
   let private isEmpty =
@@ -451,6 +458,84 @@ module Path =
         (fun () -> ".gitignore" |> expectFileName (Some ".gitignore"))
     ]
 
+  let private expectStripped sep expected prefix path =
+    let result =
+      Path.stripPrefixWith sep (Path.make prefix) (Path.make path)
+      |> Result.map Path.toString
+
+    Expect.equal result (Ok expected) ""
+
+  let private expectStripErr sep prefix path =
+    let result = Path.stripPrefixWith sep (Path.make prefix) (Path.make path)
+
+    match result with
+    | Error(PathErr.StripPrefixErr _) -> ()
+    | Ok p -> failtest $"expected Error, got Ok \"{Path.toString p}\""
+    | Error err -> failtest $"expected StripPrefixErr, got %A{err}"
+
+  let private stripPrefix =
+    testList "stripPrefix" [
+      testCase
+        "strips a root prefix"
+        (fun () ->
+          expectStripped '/' "test/haha/foo.txt" "/" "/test/haha/foo.txt"
+        )
+
+      testCase
+        "strips a directory prefix"
+        (fun () ->
+          expectStripped '/' "haha/foo.txt" "/test" "/test/haha/foo.txt"
+        )
+
+      testCase
+        "strips a prefix with trailing separator"
+        (fun () ->
+          expectStripped '/' "haha/foo.txt" "/test/" "/test/haha/foo.txt"
+        )
+
+      testCase
+        "returns empty when prefix matches the full path"
+        (fun () -> expectStripped '/' "" "/test/foo.txt" "/test/foo.txt")
+
+      testCase
+        "returns empty when prefix matches with trailing separator"
+        (fun () -> expectStripped '/' "" "/test/foo.txt/" "/test/foo.txt")
+
+      testCase
+        "strips a relative prefix"
+        (fun () -> expectStripped '/' "c" "a/b" "a/b/c")
+
+      testCase
+        "errors on partial component match"
+        (fun () -> expectStripErr '/' "/te" "/test/foo.txt")
+
+      testCase
+        "errors when prefix is not a prefix of the path"
+        (fun () -> expectStripErr '/' "/haha" "/test/foo.txt")
+
+      testCase
+        "errors when mixing relative prefix with absolute path"
+        (fun () -> expectStripErr '/' "test" "/test/foo.txt")
+
+      testCase
+        "errors when prefix is longer than the path"
+        (fun () -> expectStripErr '/' "/a/b/c" "/a")
+
+      testCase
+        "strips a windows drive prefix"
+        (fun () -> expectStripped '\\' @"a\b" @"C:\" @"C:\a\b")
+
+      testCase
+        "errors on mismatched drive prefixes"
+        (fun () -> expectStripErr '\\' @"C:\" @"D:\foo")
+
+      testCase
+        "strips a unc prefix"
+        (fun () ->
+          expectStripped '\\' "dir" @"\\server\share" @"\\server\share\dir"
+        )
+    ]
+
   let tests =
     testList "Path" [
       getPrefixAndRoot
@@ -461,4 +546,5 @@ module Path =
       extension
       withExtension
       fileName
+      stripPrefix
     ]

@@ -23,6 +23,15 @@ type PathComponent =
   | ParentDir
   | Normal of string
 
+module PathComponent =
+  let toString (sep: string) =
+    function
+    | Prefix pre -> pre
+    | RootDir -> sep
+    | CurDir -> "."
+    | ParentDir -> ".."
+    | Normal str -> str
+
 /// Lexical operations over `Path` values.
 ///
 /// Functions in this module do not access the filesystem. They operate only on
@@ -60,21 +69,28 @@ module Path =
         |> Option.map snd
         |> Option.bind (String.splitOnce "\\")
 
-      let host = hostAndRest |> Option.map fst
+      let host, rest = Option.unzip hostAndRest
 
-      let share =
-        hostAndRest
-        |> Option.map snd
+      let share, root =
+        rest
         |> Option.bind (String.splitOnce "\\")
-        |> Option.map fst
-        |> Option.reject ((=) "..")
-        |> Option.reject ((=) ".")
+        |> Option.unzip
+        |> fun (share, root) ->
+            let share =
+              share
+              |> Option.orElse rest
+              |> Option.reject ((=) "..")
+              |> Option.reject ((=) ".")
+              |> Option.reject String.isNullOrWhiteSpace
+
+            share, Some "\\"
+
 
       let prefix =
         Option.zip host share
         |> Option.map (fun (host, share) -> $"\\\\{host}\\{share}")
 
-      prefix, Some "\\"
+      prefix, root
 
     | _ when String.startsWith "\\" p -> None, Some "\\"
 
@@ -89,14 +105,14 @@ module Path =
 
   let private prefixRootTail p =
     let prefix, root = getPrefixAndRoot p
+    let (Path str) = p
 
     let prefixRootLen =
       let prefixLen = prefix |> Option.map String.len |> Option.defaultValue 0
       let rootLen = root |> Option.map String.len |> Option.defaultValue 0
-      prefixLen + rootLen
+      min (prefixLen + rootLen) (String.len str)
 
     let tail =
-      let (Path str) = p
       str |> String.substringFrom prefixRootLen |> Option.defaultValue str
 
     prefix, root, tail
@@ -169,6 +185,9 @@ module Path =
         | _ -> normalized.Add(Normal segment)
 
       normalized
+
+  let ofComponents (components: PathComponent seq) : Path = failwith "todo"
+
 
   /// Normalizes the path lexically using the given separator, collapsing
   /// dot and dot-dot segments without accessing the filesystem.
@@ -263,8 +282,56 @@ module Path =
       | _ -> None
     )
 
-  let stripPrefix (prefix: Path) (Path p) : Result<Path, PathErr> =
-    failwith "todo"
+  let stripPrefixWith sep prefix path : Result<Path, PathErr> =
+    let prefixComponents = components prefix
+    let components = components path
+    let prefixLen = Vec.len prefixComponents
+    let cmpLen = Vec.len components
+
+    if prefixLen > cmpLen then
+      Error(
+        StripPrefixErr "Prefix cannot have more segments then the given path"
+      )
+
+    else
+      let mutable i = 0
+      let mutable matches = true
+      let mutable lastPfx = None
+      let mutable lastCmp = None
+
+      while matches && i < Vec.len prefixComponents && i < Vec.len components do
+        lastPfx <- Vec.item i prefixComponents
+        lastCmp <- Vec.item i components
+        matches <- lastPfx = lastCmp
+
+        if matches then
+          i <- i + 1
+
+      if not matches then
+        let sep = string sep
+
+        let prefix =
+          lastPfx
+          |> Option.map (PathComponent.toString sep)
+          |> Option.defaultValue ""
+
+        let cmp =
+          lastCmp
+          |> Option.map (PathComponent.toString sep)
+          |> Option.defaultValue ""
+
+        StripPrefixErr
+          $"prefix \"{prefix}\" does not match actual segment \"{cmp}\""
+        |> Error
+      else
+        components
+        |> Seq.skip i
+        |> Seq.map (PathComponent.toString (string sep))
+        |> String.joinWith sep
+        |> Path
+        |> Ok
+
+  let stripPrefix = stripPrefixWith Separator
 
   let filePrefix (Path p) : string Option = failwith "todo"
   let fileStem (Path p) : string Option = failwith "todo"
