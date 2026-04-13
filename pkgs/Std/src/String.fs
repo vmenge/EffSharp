@@ -121,3 +121,5 @@ module String =
 
   let item (i: int) (str: string) : char option =
     if i >= 0 && i < str.Length then Some str[i] else None
+
+  let contains (substr: string) (str: string) : bool = str.Contains substr

@@ -333,12 +333,38 @@ module Path =
 
   let stripPrefix = stripPrefixWith Separator
 
-  let filePrefix (Path p) : string Option = failwith "todo"
-  let fileStem (Path p) : string Option = failwith "todo"
+  let filePrefix path =
+    fileName path
+    |> Option.bind (fun fname ->
+      let str, before =
+        match String.item 0 fname with
+        | Some '.' -> fname |> String.substringFrom 1, "."
+        | _ -> Some fname, ""
+
+      str
+      |> Option.bind (String.splitOnce ".")
+      |> Option.map fst
+      |> Option.orElse str
+      |> Option.map (fun x -> $"{before}{x}")
+    )
+
+  let fileStem path =
+    fileName path
+    |> Option.bind (fun fname ->
+      let str, before =
+        match String.item 0 fname with
+        | Some '.' -> fname |> String.substringFrom 1, "."
+        | _ -> Some fname, ""
+
+      str
+      |> Option.bind (String.revSplitOnce ".")
+      |> Option.map fst
+      |> Option.orElse str
+      |> Option.map (fun x -> $"{before}{x}")
+    )
 
   let hasTrailingSep (Path p) : bool = failwith "todo"
   let trimTrailingSep (Path p) : Path = failwith "todo"
-  let withTrailingSep (ext: string) (Path p) : Path = failwith "todo"
 
   let combine (segment: string) (Path p) : Path = failwith "todo"
   let join (Path p2) (Path p1) : Path = failwith "todo"

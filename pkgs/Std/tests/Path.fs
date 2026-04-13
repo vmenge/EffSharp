@@ -458,6 +458,112 @@ module Path =
         (fun () -> ".gitignore" |> expectFileName (Some ".gitignore"))
     ]
 
+  let private expectFilePrefix expected path =
+    let actual = path |> Path.make |> Path.filePrefix
+    Expect.equal actual expected ""
+
+  let private filePrefix =
+    testList "filePrefix" [
+      testCase
+        "returns the prefix for a simple file"
+        (fun () -> "foo.txt" |> expectFilePrefix (Some "foo"))
+
+      testCase
+        "returns the part before the first dot for a double extension"
+        (fun () -> "foo.tar.gz" |> expectFilePrefix (Some "foo"))
+
+      testCase
+        "returns the prefix for a nested path"
+        (fun () -> "a/b/foo.txt" |> expectFilePrefix (Some "foo"))
+
+      testCase
+        "returns the full name when there is no extension"
+        (fun () -> "foo" |> expectFilePrefix (Some "foo"))
+
+      testCase
+        "returns the full name for a dotfile"
+        (fun () -> ".gitignore" |> expectFilePrefix (Some ".gitignore"))
+
+      testCase
+        "returns the prefix for a dotfile with an extension"
+        (fun () -> ".foo.txt" |> expectFilePrefix (Some ".foo"))
+
+      testCase
+        "returns the prefix for a dotfile with multiple extensions"
+        (fun () -> ".foo.bar.txt" |> expectFilePrefix (Some ".foo"))
+
+      testCase
+        "returns None for an empty path"
+        (fun () -> "" |> expectFilePrefix None)
+
+      testCase
+        "returns None for root"
+        (fun () -> "/" |> expectFilePrefix None)
+
+      testCase
+        "returns None for dot-dot"
+        (fun () -> ".." |> expectFilePrefix None)
+
+      testCase
+        "returns the prefix for a path ending with a dot"
+        (fun () -> "foo." |> expectFilePrefix (Some "foo"))
+
+      testCase
+        "returns the prefix for a windows path"
+        (fun () -> @"C:\a\b.txt" |> expectFilePrefix (Some "b"))
+    ]
+
+  let private expectFileStem expected path =
+    let actual = path |> Path.make |> Path.fileStem
+    Expect.equal actual expected ""
+
+  let private fileStem =
+    testList "fileStem" [
+      testCase
+        "returns the stem for a simple file"
+        (fun () -> "foo.txt" |> expectFileStem (Some "foo"))
+
+      testCase
+        "returns everything before the last dot for a double extension"
+        (fun () -> "foo.tar.gz" |> expectFileStem (Some "foo.tar"))
+
+      testCase
+        "returns the stem for a nested path"
+        (fun () -> "a/b/foo.txt" |> expectFileStem (Some "foo"))
+
+      testCase
+        "returns the full name when there is no extension"
+        (fun () -> "foo" |> expectFileStem (Some "foo"))
+
+      testCase
+        "returns the full name for a dotfile"
+        (fun () -> ".gitignore" |> expectFileStem (Some ".gitignore"))
+
+      testCase
+        "returns the stem for a dotfile with an extension"
+        (fun () -> ".foo.txt" |> expectFileStem (Some ".foo"))
+
+      testCase
+        "returns None for an empty path"
+        (fun () -> "" |> expectFileStem None)
+
+      testCase
+        "returns None for root"
+        (fun () -> "/" |> expectFileStem None)
+
+      testCase
+        "returns None for dot-dot"
+        (fun () -> ".." |> expectFileStem None)
+
+      testCase
+        "returns the stem for a path ending with a dot"
+        (fun () -> "foo." |> expectFileStem (Some "foo"))
+
+      testCase
+        "returns the stem for a windows path"
+        (fun () -> @"C:\a\b.txt" |> expectFileStem (Some "b"))
+    ]
+
   let private expectStripped sep expected prefix path =
     let result =
       Path.stripPrefixWith sep (Path.make prefix) (Path.make path)
@@ -546,5 +652,7 @@ module Path =
       extension
       withExtension
       fileName
+      filePrefix
+      fileStem
       stripPrefix
     ]
