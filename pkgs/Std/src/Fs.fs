@@ -21,6 +21,30 @@ type Permissions = struct end
 // TODO
 type FileTimes = struct end
 
+// TODO
+type FileHandle = struct end
+
+[<Struct>]
+type FileAccess =
+  | Read
+  | Write
+  | ReadWrite
+  | Append
+
+[<Struct>]
+type FileCreate =
+  | Open
+  | Create
+  | CreateNew
+  | OpenOrCreate
+  | Truncate
+
+[<Struct>]
+type FileOpen = {
+  Access: FileAccess
+  Create: FileCreate
+}
+
 [<Effect(Mode.Wrap)>]
 type Fs =
   abstract readText: Path -> Eff<string, FsErr, unit>
@@ -55,3 +79,10 @@ type Fs =
 
   abstract setPermissions: Path -> Permissions -> Eff<unit, FsErr, unit>
   abstract setTimes: Path -> FileTimes -> Eff<unit, FsErr, unit>
+
+  abstract withFile:
+    Path ->
+    FileOpen ->
+    (FileHandle -> Eff<'t, FsErr, unit>) ->
+      Eff<'t, FsErr, unit>
+

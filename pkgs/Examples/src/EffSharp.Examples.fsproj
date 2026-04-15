@@ -13,7 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Core\src\Core.fsproj" />
     <ProjectReference Include="..\..\Gen\src\Gen.fsproj" />
-    <ProjectReference Include="..\..\Std\src\Std.fsproj" />
+    <ProjectReference Include="..\..\Std\src\EffSharp.Std.fsproj" />
   </ItemGroup>
 
 </Project>
