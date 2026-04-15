@@ -642,6 +642,120 @@ module Path =
         )
     ]
 
+  let private expectCombined sep expected segment path =
+    let actual =
+      path |> Path.make |> Path.combineWith sep segment |> Path.toString
+
+    Expect.equal actual expected ""
+
+  let private combine =
+    testList "combine" [
+      testCase
+        "appends a segment to a simple path"
+        (fun () -> "a" |> expectCombined '/' "a/b" "b")
+
+      testCase
+        "appends a segment to a nested path"
+        (fun () -> "a/b" |> expectCombined '/' "a/b/c" "c")
+
+      testCase
+        "appends a segment to root"
+        (fun () -> "/" |> expectCombined '/' "/b" "b")
+
+      testCase
+        "does not double the separator when path has a trailing separator"
+        (fun () -> "a/" |> expectCombined '/' "a/b" "b")
+
+      testCase
+        "appends to an empty path"
+        (fun () -> "" |> expectCombined '/' "b" "b")
+
+      testCase
+        "returns the path unchanged when segment is empty"
+        (fun () -> "a" |> expectCombined '/' "a" "")
+
+      testCase
+        "appends a segment to an absolute path"
+        (fun () -> "/a/b" |> expectCombined '/' "/a/b/c" "c")
+
+      testCase
+        "appends a dotfile segment"
+        (fun () -> "a" |> expectCombined '/' "a/.gitignore" ".gitignore")
+
+      testCase
+        "appends a segment with an extension"
+        (fun () -> "a/b" |> expectCombined '/' "a/b/foo.txt" "foo.txt")
+
+      testCase
+        "appends a segment to a windows path"
+        (fun () -> @"C:\a" |> expectCombined '\\' @"C:\a\b" "b")
+
+      testCase
+        "replaces the path when segment is absolute"
+        (fun () -> "a/b" |> expectCombined '/' "/c" "/c")
+
+      testCase
+        "replaces the path with a dot segment"
+        (fun () -> "a" |> expectCombined '/' "a/." ".")
+
+      testCase
+        "replaces the path with a parent segment"
+        (fun () -> "a" |> expectCombined '/' "a/.." "..")
+
+      testCase
+        "returns empty when both are empty"
+        (fun () -> "" |> expectCombined '/' "" "")
+    ]
+
+  let private expectJoined sep expected p2 p1 =
+    let actual =
+      p1 |> Path.make |> Path.joinWith sep (Path.make p2) |> Path.toString
+
+    Expect.equal actual expected ""
+
+  let private join =
+    testList "join" [
+      testCase
+        "appends a relative path"
+        (fun () -> "a" |> expectJoined '/' "a/b" "b")
+
+      testCase
+        "appends a nested relative path"
+        (fun () -> "a" |> expectJoined '/' "a/b/c" "b/c")
+
+      testCase
+        "replaces when the second path is absolute"
+        (fun () -> "a/b" |> expectJoined '/' "/c" "/c")
+
+      testCase
+        "does not double the separator when base has a trailing separator"
+        (fun () -> "a/" |> expectJoined '/' "a/b" "b")
+
+      testCase
+        "appends to root"
+        (fun () -> "/" |> expectJoined '/' "/b" "b")
+
+      testCase
+        "appends to an empty base"
+        (fun () -> "" |> expectJoined '/' "b" "b")
+
+      testCase
+        "returns the base unchanged when joining empty"
+        (fun () -> "a" |> expectJoined '/' "a" "")
+
+      testCase
+        "replaces when joining an absolute onto a windows path"
+        (fun () -> @"C:\a" |> expectJoined '\\' @"D:\b" @"D:\b")
+
+      testCase
+        "keeps the prefix when joining a root-only path on windows"
+        (fun () -> @"C:\a" |> expectJoined '\\' @"C:\b" @"\b")
+
+      testCase
+        "returns empty when both are empty"
+        (fun () -> "" |> expectJoined '/' "" "")
+    ]
+
   let tests =
     testList "Path" [
       getPrefixAndRoot
@@ -655,4 +769,6 @@ module Path =
       filePrefix
       fileStem
       stripPrefix
+      combine
+      join
     ]

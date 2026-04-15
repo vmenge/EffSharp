@@ -186,8 +186,8 @@ module Path =
 
       normalized
 
+  /// Reconstructs a path from a sequence of components.
   let ofComponents (components: PathComponent seq) : Path = failwith "todo"
-
 
   /// Normalizes the path lexically using the given separator, collapsing
   /// dot and dot-dot segments without accessing the filesystem.
@@ -382,5 +382,41 @@ module Path =
   let trimTrailingSep (Path p) =
     String.trimEndOf [| UnixSeparator; WindowsSeparator |] p
 
-  let combine (segment: string) (Path p) : Path = failwith "todo"
-  let join (Path p2) (Path p1) : Path = failwith "todo"
+  /// Appends a string segment to the path using the given separator.
+  /// If the segment is absolute, it replaces the path.
+  let combineWith (separator: char) (segment: string) path : Path =
+    match
+      String.isNullOrWhiteSpace segment, getPrefixAndRoot (Path segment)
+    with
+    | true, _ -> path
+
+    | _, (Some _, _) -> Path segment
+
+    | _, (None, Some _) ->
+      match getPrefixAndRoot path with
+      | Some pfx, _ -> Path $"{pfx}{segment}"
+      | _, _ -> Path segment
+
+    | _ ->
+      let (Path pathstr) = path
+
+      let separator =
+        match hasTrailingSep path, isEmpty path with
+        | _, true -> ""
+        | true, _ -> ""
+        | false, false -> string separator
+
+      Path $"{pathstr}{separator}{segment}"
+
+  /// Appends a string segment to the path using the OS separator.
+  /// If the segment is absolute, it replaces the path.
+  let combine = combineWith Separator
+
+  /// Joins two paths using the given separator.
+  /// If the second path is absolute, it replaces the first.
+  let joinWith (separator: char) (Path p2) p1 : Path =
+    combineWith separator p2 p1
+
+  /// Joins two paths using the OS separator.
+  /// If the second path is absolute, it replaces the first.
+  let join = joinWith Separator
