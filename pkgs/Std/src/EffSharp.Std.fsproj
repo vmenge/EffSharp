@@ -21,6 +21,7 @@
     <Compile Include="Fs.fs" />
     <Compile Include="Console.fs" />
     <Compile Include="Clock.fs" />
+    <Compile Include="Env.fs" />
   </ItemGroup>
 
   <ItemGroup>

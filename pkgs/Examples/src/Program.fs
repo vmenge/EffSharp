@@ -15,12 +15,15 @@ type AppEnv() =
   interface Effect.Clock with
     member _.Clock = Clock.Provider()
 
+  interface Effect.Env with
+    member _.Env = Env.Provider()
+
 let program () = eff {
   let! now = Clock.now ()
   do! println $"starting program at {now}"
 
-  let! contents = Fs.readText (Path "./Effects.fs")
-  do! println $"file contents: {contents}"
+  let! myvar = Env.get "MYVAR"
+  do! println $"MYVAR: {myvar}"
 
   return ()
 }
