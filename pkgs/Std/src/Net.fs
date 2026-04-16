@@ -32,15 +32,15 @@ module Addr =
 
 /// Bound + listening socket (TCP or Unix).
 [<Struct>]
-type Listener internal (socket: Socket) =
+type Listener(socket: Socket) =
   member internal _.Socket = socket
 
 /// Bound UDP datagram socket.
 [<Struct>]
-type UdpSocket internal (socket: Socket) =
+type UdpSocket(socket: Socket) =
   member internal _.Socket = socket
 
-type Stream internal (socket: Socket) =
+type Stream(socket: Socket) =
   member internal _.Socket = socket
   member _.AsIOStream() = new NetworkStream(socket) :> System.IO.Stream
 
