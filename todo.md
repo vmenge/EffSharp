@@ -1,5 +1,6 @@
-net, command
+thread safety of Stdio
 
 for libs:
-- logging
-- httpclient
+- EffSharp.Logging 
+- EffSharp.Http.Client
+- EffSharp.Http.Server
