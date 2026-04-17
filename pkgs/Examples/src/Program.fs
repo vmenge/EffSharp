@@ -4,38 +4,20 @@ open EffSharp.Core
 open EffSharp.Std
 open System
 open type EffSharp.Std.Stdio
+open System.Text
 
-type AppEnv() =
-  interface Effect.Stdio with
-    member _.Stdio = Stdio.Provider()
+let program () = effr {
+  let! out = "ls" |. "grep -i .fs" |> Cmd.output
+  do! String.fromUtf8 out.Stdout |> Eff.map (printfn "%s")
 
-  interface Effect.Fs with
-    member _.Fs = Fs.Provider()
-
-  interface Effect.Clock with
-    member _.Clock = Clock.Provider()
-
-  interface Effect.Env with
-    member _.Env = Env.Provider()
-
-  interface Effect.Random with
-    member _.Random = Random.Provider()
-
-let program () = eff {
-  let! now = Clock.now ()
-  do! println $"starting program at {now}"
-
-  let! myvar = Env.get "MYVAR"
-  do! println $"MYVAR: {myvar}"
-
-  let! randomval = Random.intRange 1 101
-  do! println $"random val: {randomval}"
+  let! test = "echo test" |> Cmd.output
+  do! String.fromUtf8 test.Stdout |> Eff.map (printfn "%s")
 
   return ()
 }
 
 [<EntryPoint>]
 let main _ =
-  program () |> Eff.runSync (AppEnv()) |> printfn "%O"
+  program () |> Eff.runSync (Std.Provider()) |> printfn "%O"
 
   0

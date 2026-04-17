@@ -29,3 +29,9 @@ module Option =
     match o with
     | Some _ -> Some v
     | None -> None
+
+  let tryCatch f =
+    try
+      Some(f ())
+    with _ ->
+      None

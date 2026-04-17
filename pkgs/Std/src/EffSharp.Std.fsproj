@@ -16,6 +16,8 @@
     <Compile Include="Utils.fs" />
     <Compile Include="ValueOption.fs" />
     <Compile Include="Option.fs" />
+    <Compile Include="Result.fs" />
+    <Compile Include="Task.fs" />
     <Compile Include="Vec.fs" />
     <Compile Include="String.fs" />
     <Compile Include="Path.fs" />
@@ -27,6 +29,7 @@
     <Compile Include="Net.fs" />
     <Compile Include="Command.fs" />
     <Compile Include="Cmd.fs" />
+    <Compile Include="Std.fs" />
   </ItemGroup>
 
   <ItemGroup>

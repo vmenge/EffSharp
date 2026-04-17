@@ -1,5 +1,6 @@
 namespace EffSharp.Std
 
+open EffSharp.Core
 open System
 
 module String =
@@ -123,3 +124,6 @@ module String =
     if i >= 0 && i < str.Length then Some str[i] else None
 
   let contains (substr: string) (str: string) : bool = str.Contains substr
+
+  let fromUtf8 (bytes: byte array) : Eff<string, exn, 'env> =
+    Eff.tryCatch (fun () -> System.Text.Encoding.UTF8.GetString bytes)

@@ -30,16 +30,14 @@ module CmdExt =
 
       for ch in s do
         match quoteChar with
-        | ValueSome q when ch = q ->
-          quoteChar <- ValueNone
-        | ValueSome _ ->
-          current.Append(ch) |> ignore
+        | ValueSome q when ch = q -> quoteChar <- ValueNone
+        | ValueSome _ -> current.Append ch |> ignore
         | ValueNone ->
           match ch with
           | '"'
           | ''' -> quoteChar <- ValueSome ch
-          | c when Char.IsWhiteSpace(c) -> flush ()
-          | c -> current.Append(c) |> ignore
+          | c when Char.IsWhiteSpace c -> flush ()
+          | c -> current.Append c |> ignore
 
       flush ()
 
@@ -61,10 +59,24 @@ module CmdExt =
     let stdout stdio cmd : Cmd = { cmd with Stdout = stdio }
     let stderr stdio cmd : Cmd = { cmd with Stderr = stdio }
 
-    let pipe (left: Cmd) (right: Cmd) : Cmd =
-      { right with Stdin = FromCmd { left with Stdout = Piped } }
+    let pipe (left: Cmd) (right: Cmd) : Cmd = {
+      right with
+          Stdin = FromCmd { left with Stdout = Piped }
+    }
 
-    let output (cmd: Cmd) : Eff<Output, CommandErr, #Effect.Command> =
+
+
+[<AutoOpen>]
+module CmdExt2 =
+  type Cmd with
+    static member status(cmd: Cmd) : Eff<int, CommandErr, #Effect.Command> = eff {
+      let! child = Command.spawn cmd
+      return! child.Wait()
+    }
+
+    static member status(cmd: string) = Cmd.parse cmd |> Cmd.status
+
+    static member output(cmd: Cmd) : Eff<Output, CommandErr, #Effect.Command> =
       let cmd = {
         cmd with
             Stdout = Piped
@@ -88,24 +100,20 @@ module CmdExt =
         }
       }
 
-    let status (cmd: Cmd) : Eff<int, CommandErr, #Effect.Command> = eff {
-      let! child = Command.spawn cmd
-      return! child.Wait()
-    }
+    static member output(cmd: string) = Cmd.parse cmd |> Cmd.output
 
-  type PipeOp = PipeOp with
-    static member Resolve(_: PipeOp, cmd: Cmd) = cmd
-    static member Resolve(_: PipeOp, s: string) = Cmd.parse s
+  type PipeOp = PipeOp
+    with
+
+      static member Resolve(_: PipeOp, cmd: Cmd) = cmd
+      static member Resolve(_: PipeOp, s: string) = Cmd.parse s
 
   let inline (|.) (left: ^L) (right: ^R) : Cmd =
     let l =
-      ((^L or PipeOp) :
-        (static member Resolve : PipeOp * ^L -> Cmd)
-        (PipeOp, left))
+      ((^L or PipeOp): (static member Resolve: PipeOp * ^L -> Cmd) (PipeOp, left))
 
     let r =
-      ((^R or PipeOp) :
-        (static member Resolve : PipeOp * ^R -> Cmd)
-        (PipeOp, right))
+      ((^R or PipeOp): (static member Resolve: PipeOp * ^R -> Cmd) (PipeOp,
+                                                                    right))
 
     Cmd.pipe l r
