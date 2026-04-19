@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>EffSharp.Std</PackageId>
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/vmenge/EffSharp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/vmenge/EffSharp</RepositoryUrl>
