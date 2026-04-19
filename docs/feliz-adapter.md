@@ -22,7 +22,7 @@ This proposal adds:
 - a hooks-first package `EffSharp.Feliz`
 - a helper module `Hook`
 - default hook-factory constructors `Hook.mkUse` and `Hook.mkUseEffect`
-- minimal structural combinators `Hook.map` and `Hook.zip`
+- a structural combinator `Hook.map`
 
 This proposal does not add:
 
@@ -102,10 +102,10 @@ Package name:
 EffSharp.Feliz
 ```
 
-Helper module:
+Helper type:
 
 ```fsharp
-module Hook
+type Hook
 ```
 
 Supporting alias:
@@ -124,34 +124,28 @@ heterogeneous.
 The package should publish the following baseline surface:
 
 ```fsharp
-module Hook =
-  val map :
+type Hook =
+  static member map :
     ('a -> 'b) ->
     Eff<'args -> 'a, 'e, 'env> ->
       Eff<'args -> 'b, 'e, 'env>
 
-  val zip :
-    Eff<'args -> 'a, 'e, 'env> ->
-    Eff<'args -> 'b, 'e, 'env> ->
-      Eff<'args -> 'a * 'b, 'e, 'env>
-
-  val mkUse :
+  static member mkUse :
     ('args -> Eff<'a, 'e, 'env>) ->
       Eff<'args -> 'a, 'e, 'env>
 
-  val mkUseEffect :
+  static member mkUseEffect :
     ('args -> Eff<unit, 'e, 'env>) ->
       Eff<'args -> DependencyList -> unit, 'e, 'env>
 
-  val mkUseEffect :
+  static member mkUseEffect :
     ('args -> Eff<unit -> unit, 'e, 'env>) ->
       Eff<'args -> DependencyList -> unit, 'e, 'env>
 ```
 
 ### Meaning
 
-`Hook.map` and `Hook.zip` are structural combinators over effect-produced hook
-factories.
+`Hook.map` is a structural combinator over effect-produced hook factories.
 
 `Hook.mkUse` lifts an ordinary effectful computation into a hook factory.
 
@@ -167,7 +161,6 @@ The helper layer must obey the following formal rules:
 
 - helper-produced hooks must invoke their underlying hooks in a fixed order
 - helper-produced hooks must not branch on hook invocation
-- helper combinators only compose hook factories with the same `'args`
 - `unit` is the natural zero-argument specialization
 
 This is why the public helper layer is intentionally small.
@@ -267,27 +260,22 @@ Eff<string -> DependencyList -> unit, ChatError, #Effect.Chat>
 
 ## Worked Composition Example
 
-The minimal helper layer should be enough to combine resolved hooks without
-inventing a larger framework:
+Hooks with heterogeneous arguments are composed directly inside `mkUse`:
 
 ```fsharp
-let useTheme =
-  Hook.mkUse (fun () -> Theme.current ())
-
-let useUser =
-  Hook.mkUse (fun userId -> Api.getUser userId)
-
 let useThemeAndUser =
-  Hook.zip useTheme useUser
+  Hook.mkUse (fun userId -> eff {
+    let! theme = Theme.current ()
+    let! user = Api.getUser userId
+    return theme, user
+  })
 ```
 
 Type:
 
 ```fsharp
-Eff<'args -> Theme * User, 'e, 'env>
+Eff<string -> Theme * User, 'e, 'env>
 ```
-
-where both hooks share the same `'args` shape.
 
 ---
 
