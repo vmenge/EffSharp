@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "test:fable:core:build": "dotnet fable pkgs/Core/fable-tests/Core.Fable.Tests.fsproj -o .fable-build/core-tests --sourceMaps",
+    "test:fable:core": "npm run test:fable:core:build && vitest run --config vitest.config.mjs",
+    "test:fable:core:watch": "dotnet fable watch pkgs/Core/fable-tests/Core.Fable.Tests.fsproj -o .fable-build/core-tests --sourceMaps --run \"npx vitest --config vitest.config.mjs\""
+  },
+  "devDependencies": {
+    "vitest": "^4.1.4"
+  }
+}

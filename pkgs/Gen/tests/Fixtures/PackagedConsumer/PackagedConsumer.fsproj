@@ -12,7 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Core\src\Core.fsproj" />
     <PackageReference Include="EffSharp.Gen" />
-    <PackageVersion Include="EffSharp.Gen" Version="0.0.1" />
+    <PackageVersion Include="EffSharp.Gen" Version="0.0.2" />
   </ItemGroup>
 
 </Project>

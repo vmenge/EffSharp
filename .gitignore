@@ -17,5 +17,10 @@ tests/milestone/out/
 .tmp/
 .tmp-runtime/
 target/
+node_modules/
+.fable-build/
+coverage/
 
 .codex
+
+**.fs.js

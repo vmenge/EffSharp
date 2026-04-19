@@ -157,7 +157,7 @@ module Cmd =
         let env = AppEnv()
 
         let! result =
-          "echo hello" |. "cat" |> Cmd.output |> Eff.runTask env
+          "echo hello" |. "cat" |> Cmd.output |> Eff.run env
 
         let output = Exit.ok result
 
@@ -176,7 +176,7 @@ module Cmd =
         let! result =
           "printf 'a\nb\nc'" |. "sort -r" |. "head -1"
           |> Cmd.output
-          |> Eff.runTask env
+          |> Eff.run env
 
         let output = Exit.ok result
 

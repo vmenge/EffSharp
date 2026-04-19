@@ -10,7 +10,7 @@ module ReportCE =
       testTask "pure return can be annotated as exn error" {
         let program () : Eff<int, exn, unit> = effr { return 1 }
 
-        let! value = program () |> Eff.runTask ()
+        let! value = program () |> Eff.run ()
 
         Expect.equal
           value
@@ -24,7 +24,7 @@ module ReportCE =
             let! x = Err "boom"
             return x
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -48,7 +48,7 @@ module ReportCE =
       }
 
       testTask "return! normalizes Eff errors to Report" {
-        let! value = effr { return! Err "boom" } |> Eff.runTask ()
+        let! value = effr { return! Err "boom" } |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -72,7 +72,7 @@ module ReportCE =
             let! _ = Error "boom"
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -100,7 +100,7 @@ module ReportCE =
             let! _ = taskResult ()
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -125,7 +125,7 @@ module ReportCE =
             let! y = if x = 1 then Err "boom" else Pure 2
             return y
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -153,7 +153,7 @@ module ReportCE =
             let! z = Pure 3
             return x + y + z
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 6) "mixed successful sources should compose"
       }
@@ -164,7 +164,7 @@ module ReportCE =
             let! _ = None
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -191,7 +191,7 @@ module ReportCE =
             let! _ = Err boom
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -218,7 +218,7 @@ module ReportCE =
             let! _ = Err boom
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 

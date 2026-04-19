@@ -8,7 +8,7 @@ open System.Threading.Tasks
 module internal EffRuntime =
   let private boxOption value = box value
 
-  let mutable private nextFiberId = 0L
+  let mutable private fiberIdGen = IdGen()
 
   type FiberLifecycle =
     | Running
@@ -21,15 +21,15 @@ module internal EffRuntime =
 
   [<AllowNullLiteral>]
   type CompletionInbox<'t>() =
-    let queue = ConcurrentQueue<'t>()
-    let signal = new SemaphoreSlim(0)
+    let queue = Queue<'t>()
+    let signal = new Sem(0)
 
     member _.Publish(value: 't) =
       queue.Enqueue(value)
       signal.Release() |> ignore
 
-    member _.Receive() : Task<'t> =
-      task {
+    member _.Receive() : Await<'t> =
+      await {
         let mutable value = Unchecked.defaultof<'t>
         let mutable found = false
 
@@ -64,7 +64,7 @@ module internal EffRuntime =
     | Continue of beff: BoxedEff<'env> * fr: Frame<'env> list
     | Done of bexit: BoxedExit
     | Await of
-      tsk: Task<obj> * token: CancellationToken * awfn: (Result<obj, exn> -> StepResult<'env>)
+      tsk: Await<obj> * token: CancellationToken * awfn: (Result<obj, exn> -> StepResult<'env>)
     | Switch of machine: Machine * swfn: (BoxedExit -> StepResult<'env>)
 
   and [<AbstractClass>] Machine() =
@@ -73,18 +73,18 @@ module internal EffRuntime =
   and [<Struct>] MachinePoll =
     | MachineDone of bexit: BoxedExit
     | MachineAwait of
-      tsk: Task<obj> * token: CancellationToken * resfn: (Result<obj, exn> -> Machine)
+      tsk: Await<obj> * token: CancellationToken * resfn: (Result<obj, exn> -> Machine)
     | MachineSwitch of machine: Machine * resume: MachineResume
 
   and [<AbstractClass>] MachineResume() =
     abstract Resume: BoxedExit -> Machine
 
   and FiberHandle(parent: FiberHandle option, cts: CancellationTokenSource) =
-    let id = Interlocked.Increment(&nextFiberId)
-    let liveChildren = ConcurrentDictionary<int64, FiberHandle>()
+    let id = fiberIdGen.Next()
+    let liveChildren = CDict<int64, FiberHandle>()
     let stateGate = obj ()
     let mutable state = FiberLifecycle.Running
-    let mutable completionTask = Unchecked.defaultof<Task<BoxedExit>>
+    let mutable completionTask = Unchecked.defaultof<Await<BoxedExit>>
     let mutable abortObserved = false
     let mutable completionClassification = CompletionClassification.Normal
     let mutable completionInbox =
@@ -100,7 +100,7 @@ module internal EffRuntime =
       | null -> failwith "fiber completion task has not been attached"
       | task -> task
 
-    member _.AttachTask(task: Task<BoxedExit>) =
+    member _.AttachTask(task: Await<BoxedExit>) =
       completionTask <- task
 
     member _.MarkAbortObserved() =
@@ -146,13 +146,17 @@ module internal EffRuntime =
       lock stateGate (fun () -> state <- FiberLifecycle.Completed)
 
     member _.RequestAbort() =
+#if FABLE_COMPILER
+      cts.Cancel()
+#else
       try
         cts.Cancel()
       with :? ObjectDisposedException ->
         ()
+#endif
 
-    member this.DrainChildren() : Task<BoxedExit option> =
-      task {
+    member this.DrainChildren() : Await<BoxedExit option> =
+      await {
         let mutable firstFailure = None
         let inbox =
           match this.TryGetCompletionInbox() with
@@ -176,8 +180,8 @@ module internal EffRuntime =
         return firstFailure
       }
 
-    member this.Complete(exit: BoxedExit) : Task<BoxedExit> =
-      task {
+    member this.Complete(exit: BoxedExit) : Await<BoxedExit> =
+      await {
         if this.HasLiveChildren then
           this.TryBeginClosing() |> ignore
 
@@ -185,7 +189,7 @@ module internal EffRuntime =
           if this.HasLiveChildren then
             this.DrainChildren()
           else
-            Task.FromResult None
+            Await.from None
 
         let finalExit =
           match drainFailure with
@@ -212,10 +216,14 @@ module internal EffRuntime =
           (inbox :> IDisposable).Dispose()
           completionInbox <- null
 
+#if FABLE_COMPILER
+        cts.Dispose()
+#else
         try
           cts.Dispose()
         with :? ObjectDisposedException ->
           ()
+#endif
 
         return finalExit
       }
@@ -542,7 +550,7 @@ module internal EffRuntime =
     while not finished do
       if isBoundaryFrames currentFrames && stepper.CurrentFiber.TryBeginClosing() then
         if stepper.CurrentFiber.HasLiveChildren then
-          let drainTask = task {
+          let drainTask = await {
             let! failure = stepper.CurrentFiber.DrainChildren()
             return boxOption failure
           }
@@ -680,7 +688,7 @@ module internal EffRuntime =
               else
                 stepper.Token
 
-            let awaited = task {
+            let awaited = await {
               let! value = tsk ()
               return box value
             }
@@ -715,9 +723,13 @@ module internal EffRuntime =
           try
             result <-
               ValueSome(
+#if FABLE_COMPILER
+                unbox<StepResult<'env>> (node.EnterFable(box stepper, box currentFrames))
+#else
                 match box node with
                 | :? INodeRuntime<'env> as runtime -> runtime.Enter(stepper, currentFrames)
                 | _ -> failwith "unknown node"
+#endif
               )
           with ex ->
             result <- ValueSome(unwind stepper (BoxedExn ex) currentFrames)
@@ -728,8 +740,8 @@ module internal EffRuntime =
     | ValueSome step -> step
     | ValueNone -> failwith "step loop exited without a result"
 
-  let runTaskLoop (machine: Machine) : Task<BoxedExit> =
-    task {
+  let runTaskLoop (machine: Machine) : Await<BoxedExit> =
+    await {
       let mutable current = machine
       let mutable resumes: MachineResume list = []
       let mutable exit = ValueNone
@@ -748,8 +760,8 @@ module internal EffRuntime =
         | MachineAwait(taskObj, token, cont) ->
           try
             let! value =
-              if token.CanBeCanceled then
-                taskObj.WaitAsync(token)
+              if CancellationToken.canBeCanceled token then
+                Await.waitAsync token taskObj
               else
                 taskObj
 
@@ -766,8 +778,8 @@ module internal EffRuntime =
         | ValueNone -> failwith "run loop exited without a result"
     }
 
-  let runFiberTask (fiber: FiberHandle) (machine: Machine) : Task<BoxedExit> =
-    task {
+  let runFiberTask (fiber: FiberHandle) (machine: Machine) : Await<BoxedExit> =
+    await {
       let! exit = runTaskLoop machine
       return! fiber.Complete(exit)
     }

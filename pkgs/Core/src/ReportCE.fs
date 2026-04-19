@@ -26,29 +26,40 @@ module ReportCE =
   [<AutoOpen>]
   module CEExtLowPriority =
     type EffrBuilder with
-      member _.Source(valueTask: ValueTask<'t>) : Eff<'t, exn, 'env> =
+#if !FABLE_COMPILER
+      member _.Source(valueTask: ValueTask<'t>) : Eff<'t, 'e, 'env> =
         Eff.ofValueTask (fun () -> valueTask)
 
-      member _.Source(task: Task<'t>) : Eff<'t, exn, 'env> =
+      member _.Source(task: Await<'t>) : Eff<'t, 'e, 'env> =
         Eff.ofTask (fun () -> task)
-
-      member _.Source(async: Async<'t>) : Eff<'t, exn, 'env> =
+#else
+      member _.Source(task: Await<'t>) : Eff<'t, 'e, 'env> =
+        Eff.ofPromise (fun () -> task)
+#endif
+      member _.Source(async: Async<'t>) : Eff<'t, 'e, 'env> =
         Eff.ofAsync (fun () -> async)
 
   [<AutoOpen>]
   module CEExtHighPriority =
     type EffrBuilder with
+
+#if !FABLE_COMPILER
       member _.Source
         (valueTaskResult: ValueTask<Result<'t, 'e>>)
         : Eff<'t, exn, 'env> =
         Eff.ofValueTask (fun () -> valueTaskResult)
         |> Eff.bind (Eff.ofResult >> (Eff.mapErr Report.make))
 
-      member _.Source(taskResult: Task<Result<'t, 'e>>) : Eff<'t, exn, 'env> =
+      member _.Source(taskResult: Await<Result<'t, 'e>>) : Eff<'t, exn, 'env> =
         Eff.ofTask (fun () -> taskResult)
         |> Eff.bind Eff.ofResult
         |> Eff.mapErr Report.make
-
+#else
+      member _.Source(taskResult: Await<Result<'t, 'e>>) : Eff<'t, exn, 'env> =
+        Eff.ofPromise (fun () -> taskResult)
+        |> Eff.bind Eff.ofResult
+        |> Eff.mapErr Report.make
+#endif
       member _.Source(asyncResult: Async<Result<'t, 'e>>) : Eff<'t, exn, 'env> =
         Eff.ofAsync (fun () -> asyncResult)
         |> Eff.bind Eff.ofResult

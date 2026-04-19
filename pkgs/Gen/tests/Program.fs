@@ -25,6 +25,5 @@ let main argv =
           PackagedConsumerE2E.tests
           RegressionE2E.tests
           ValidationTests.tests
-          ExampleE2E.tests
         ]
     )

@@ -50,7 +50,7 @@ let private expectOk expected exit name =
   | Exit.Exn ex -> raise ex
 
 let private runTaskSync env eff =
-  Eff.runTask env eff
+  Eff.run env eff
   |> fun task -> task.GetAwaiter().GetResult()
 
 let run () =

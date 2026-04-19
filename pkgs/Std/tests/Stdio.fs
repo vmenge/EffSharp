@@ -87,7 +87,7 @@ module Stdio =
     :> EffSharp.Std.Stdio
 
   let private run eff = task {
-    let! exit = Eff.runTask () eff
+    let! exit = Eff.run () eff
     return Exit.ok exit
   }
 

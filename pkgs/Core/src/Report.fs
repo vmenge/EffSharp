@@ -18,6 +18,7 @@ module Report =
     | :? exn as x -> Report(o, x.Message, x)
     | _ -> Report(o, $"{o}") :> exn
 
+#if !FABLE_COMPILER
 [<AutoOpen>]
 module ActivePattern =
   let (|ReportAs|_|) (ex: exn) : 'a option =
@@ -27,3 +28,4 @@ module ActivePattern =
       | :? 'a as value -> Some value
       | _ -> None
     | _ -> None
+#endif

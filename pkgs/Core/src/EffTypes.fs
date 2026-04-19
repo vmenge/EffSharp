@@ -10,11 +10,24 @@ type Eff<'t, 'e, 'env> =
   | Crash of exn: exn
   | Suspend of suspend: (unit -> Eff<'t, 'e, 'env>)
   | Thunk of thunk: (unit -> 't)
-  | Task of tsk: (unit -> Task<'t>)
+  | Task of tsk: (unit -> Await<'t>)
   | Read of read: ('env -> 't)
   | Node of Node<'t, 'e, 'env>
 
+#if FABLE_COMPILER
+and [<AbstractClass>] internal Node<'t, 'e, 'env>() =
+  abstract EnterFable: obj * obj -> obj
+
+  abstract TryRebuildScopeFable<'u> :
+    (Eff<'t, 'e, 'env> -> Eff<'u, 'e, 'env>) -> Eff<'u, 'e, 'env> voption
+
+  default _.TryRebuildScopeFable _ = ValueNone
+
+  abstract IsDeferScopeNodeFable: bool
+  default _.IsDeferScopeNodeFable = false
+#else
 and [<AbstractClass>] internal Node<'t, 'e, 'env>() = class end
+#endif
 
 type Fiber<'t, 'e> internal (handle: obj) =
   member internal _.Handle = handle

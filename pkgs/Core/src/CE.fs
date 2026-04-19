@@ -9,7 +9,7 @@ module CE =
 
     member _.Return(value: 't) : Eff<'t, 'e, 'env> = Eff.Pure value
 
-    member _.Zero() : Eff<unit, 'e, 'env> = Eff.Pure ()
+    member _.Zero() : Eff<unit, 'e, 'env> = Eff.Pure()
 
     member _.Delay(f: unit -> Eff<'t, 'e, 'env>) : Eff<'t, 'e, 'env> =
       Eff.suspend f
@@ -29,14 +29,15 @@ module CE =
             match box r with
             | null -> ()
             | _ -> r.Dispose()
-          ))
+          )
+        )
         binder
 
     member this.While
       (guard: unit -> bool, body: Eff<unit, 'e, 'env>)
       : Eff<unit, 'e, 'env> =
       if not (guard ()) then
-        Eff.Pure ()
+        Eff.Pure()
       else
         Eff.bind (fun () -> this.While(guard, body)) body
 
@@ -53,7 +54,7 @@ module CE =
             if enumerator.MoveNext() then
               Eff.bind (fun () -> loop ()) (body enumerator.Current)
             else
-              Eff.Pure ()
+              Eff.Pure()
           )
 
         Eff.ensure cleanup (loop ())
@@ -104,26 +105,34 @@ module CE =
   [<AutoOpen>]
   module CEExtLowPriority =
     type EffBuilder with
+#if !FABLE_COMPILER
       member _.Source(valueTask: ValueTask<'t>) : Eff<'t, 'e, 'env> =
         Eff.ofValueTask (fun () -> valueTask)
 
-      member _.Source(task: Task<'t>) : Eff<'t, 'e, 'env> =
+      member _.Source(task: Await<'t>) : Eff<'t, 'e, 'env> =
         Eff.ofTask (fun () -> task)
-
+#else
+      member _.Source(task: Await<'t>) : Eff<'t, 'e, 'env> =
+        Eff.ofPromise (fun () -> task)
+#endif
       member _.Source(async: Async<'t>) : Eff<'t, 'e, 'env> =
         Eff.ofAsync (fun () -> async)
 
   [<AutoOpen>]
   module CEExtHighPriority =
     type EffBuilder with
+#if !FABLE_COMPILER
       member _.Source
         (valueTaskResult: ValueTask<Result<'t, 'e>>)
         : Eff<'t, 'e, 'env> =
         Eff.ofValueTask (fun () -> valueTaskResult) |> Eff.bind Eff.ofResult
 
-      member _.Source(taskResult: Task<Result<'t, 'e>>) : Eff<'t, 'e, 'env> =
+      member _.Source(taskResult: Await<Result<'t, 'e>>) : Eff<'t, 'e, 'env> =
         Eff.ofTask (fun () -> taskResult) |> Eff.bind Eff.ofResult
-
+#else
+      member _.Source(taskResult: Await<Result<'t, 'e>>) : Eff<'t, 'e, 'env> =
+        Eff.ofPromise (fun () -> taskResult) |> Eff.bind Eff.ofResult
+#endif
       member _.Source(asyncResult: Async<Result<'t, 'e>>) : Eff<'t, 'e, 'env> =
         Eff.ofAsync (fun () -> asyncResult) |> Eff.bind Eff.ofResult
 

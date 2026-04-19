@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="AwaitCompat.fs" />
+    <Compile Include="Vitest.fs" />
+    <Compile Include="Helpers.fs" />
+    <Compile Include="DeferScope.test.fs" />
+    <Compile Include="Ensure.test.fs" />
+    <Compile Include="Concurrency.test.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\Core.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Fable.Promise" />
+  </ItemGroup>
+
+</Project>

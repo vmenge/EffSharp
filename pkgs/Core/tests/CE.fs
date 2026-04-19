@@ -102,13 +102,13 @@ module CE =
 
             return result
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 66) "should be equal"
       }
 
       testTask "return! eff works" {
-        let! value = eff { return! Pure 5 } |> Eff.runTask ()
+        let! value = eff { return! Pure 5 } |> Eff.run ()
 
         Expect.equal value (Exit.Ok 5) "should return from Eff directly"
       }
@@ -123,7 +123,7 @@ module CE =
             ran <- true
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Err "boom") "should return the result error"
 
@@ -140,7 +140,7 @@ module CE =
             ran <- true
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -162,7 +162,7 @@ module CE =
             ran <- true
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal
           value
@@ -178,7 +178,7 @@ module CE =
             let _ = failwith "boom"
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.ex value
 
@@ -197,7 +197,7 @@ module CE =
             ran <- true
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         let err: exn = Exit.err value
 
@@ -217,7 +217,7 @@ module CE =
             use _probe = probe
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 1) "should return the body result"
         Expect.isTrue probe.Disposed "use should dispose the resource"
@@ -232,7 +232,7 @@ module CE =
             use! _probe = Pure probe
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 1) "should return the body result"
         Expect.isTrue probe.Disposed "use! should dispose the resource"
@@ -246,7 +246,7 @@ module CE =
             use _resource = resource
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 1) "use should treat null disposal as a no-op"
       }
@@ -259,7 +259,7 @@ module CE =
             use! _resource = Pure resource
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal
           value
@@ -275,7 +275,7 @@ module CE =
             defer (Eff.thunk (fun () -> cleaned <- true))
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 1) "should return the body result"
         Expect.isTrue cleaned "defer should run on success"
@@ -289,7 +289,7 @@ module CE =
             defer (Eff.thunk (fun () -> cleaned <- true))
             return! Err "boom"
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Err "boom") "should preserve the body error"
 
@@ -305,7 +305,7 @@ module CE =
             defer (Eff.thunk (fun () -> events.Add "inner"))
             return 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 1) "should return the body result"
 
@@ -325,7 +325,7 @@ module CE =
             let! y = Pure 1
             return x + y
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 42) "should return the body result"
         Expect.equal seen 41 "defer should capture the local value"
@@ -341,7 +341,7 @@ module CE =
             defer (fun () -> seen <- seen + x)
             return x + 1
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 42) "should return the body result"
         Expect.equal seen 82 "defer should capture the bound value"
@@ -360,7 +360,7 @@ module CE =
               )
             return x
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 1) "should preserve the successful value"
 
@@ -388,7 +388,7 @@ module CE =
               events.Add $"next {x}"
               x + 1)
           )
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok 2) "outer continuation should receive the CE result"
 
@@ -416,7 +416,7 @@ module CE =
               events.Add $"next {x}"
               x + 1)
           )
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal
           value
@@ -437,7 +437,7 @@ module CE =
             for x in [ 1; 2; 3 ] do
               values.Add x
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok()) "for loop should complete"
 
@@ -463,7 +463,7 @@ module CE =
                   values.Add x
                 })
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Ok()) "for loop should complete"
 
@@ -486,7 +486,7 @@ module CE =
               if x = 2 then
                 do! Err "boom"
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal
           value
@@ -505,7 +505,7 @@ module CE =
             defer (Eff.thunk (fun () -> events.Add "inner"))
             return! Err "boom"
           }
-          |> Eff.runTask ()
+          |> Eff.run ()
 
         Expect.equal value (Exit.Err "boom") "should preserve the body error"
 
@@ -523,7 +523,7 @@ module CE =
 
         let env = Env()
 
-        let! result = value () |> Eff.runTask env
+        let! result = value () |> Eff.run env
 
         Expect.equal
           (env.Values())

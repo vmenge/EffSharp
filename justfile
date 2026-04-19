@@ -66,3 +66,9 @@ test *args:
         dotnet run --project "$project"; \
       fi; \
     done <<< "$projects"
+
+test-fable-core:
+    npm run test:fable:core
+
+watch-fable-core:
+    npm run test:fable:core:watch

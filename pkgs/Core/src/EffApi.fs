@@ -43,19 +43,22 @@ module Eff =
     | ValueSome v -> Eff.Pure v
     | ValueNone -> Eff.Err(f ())
 
-  let ofTask f = Eff.Task f
-
+#if FABLE_COMPILER
+  let ofPromise (f: unit -> Await<'t>) = Eff.Task f
+#else
+  let ofTask (f: unit -> Await<'t>) = Eff.Task f
   let ofValueTask (f: unit -> ValueTask<'a>) =
-    Eff.Task(fun () -> task {
+    Eff.Task(fun () -> await {
       let! x = f ()
       return x
     })
+#endif
 
-  let ofAsync async = Eff.Task(fun () -> async () |> Async.StartAsTask)
+  let ofAsync async = Eff.Task(fun () -> async () |> Await.ofAsync)
 
   let sleep (timespan: TimeSpan) =
     Eff.Task
-    <| fun () -> task { do! Task.Delay(int timespan.TotalMilliseconds) }
+    <| fun () -> await { do! Await.delay timespan }
 
   let rec mapErr (f: 'e1 -> 'e2) (ef: Eff<'t, 'e1, 'env>) : Eff<'t, 'e2, 'env> =
     match ef with
@@ -76,7 +79,7 @@ module Eff =
     | Eff.Suspend suspend -> Eff.Suspend(fun () -> map f (suspend ()))
     | Eff.Thunk thunk -> Eff.Thunk(fun () -> f (thunk ()))
     | Eff.Task t ->
-      Eff.Task(fun () -> task {
+      Eff.Task(fun () -> await {
         let! x = t ()
         return f x
       })
@@ -94,37 +97,63 @@ module Eff =
     | Eff.Task _ -> Eff.Node(EffNodes.FlatMap(ef, f))
     | Eff.Read _ -> Eff.Node(EffNodes.FlatMap(ef, f))
     | Eff.Node node ->
+#if FABLE_COMPILER
+      match node.TryRebuildScopeFable(fun inner -> bind f inner) with
+      | ValueSome rebuilt -> rebuilt
+      | ValueNone -> Eff.Node(EffNodes.FlatMap(ef, f))
+#else
       match box node with
       | :? EffNodes.IDeferScopeOps<'t, 'e, 'env> as n ->
         n.RebuildScope(fun inner -> bind f inner)
       | _ -> Eff.Node(EffNodes.FlatMap(ef, f))
+#endif
 
   let rec internal bindReturn f ef =
     match ef with
     | Eff.Node node ->
+#if FABLE_COMPILER
+      match node.TryRebuildScopeFable(fun inner -> bindReturn f inner) with
+      | ValueSome rebuilt -> rebuilt
+      | ValueNone -> map f ef
+#else
       match box node with
       | :? EffNodes.IDeferScopeOps<'t, 'e, 'env> as n ->
         n.RebuildScope(fun inner -> bindReturn f inner)
       | _ -> map f ef
+#endif
     | _ -> map f ef
 
   let rec internal deferScope cleanup eff =
     match eff with
     | Eff.Node node ->
+#if FABLE_COMPILER
+      match node.TryRebuildScopeFable(fun inner -> deferScope cleanup inner) with
+      | ValueSome rebuilt -> rebuilt
+      | ValueNone ->
+        Eff.Node(EffNodes.DeferScope<'t, 't, 'e, 'env>(eff, Eff.Pure, cleanup))
+#else
       match box node with
       | :? EffNodes.IDeferScopeOps<'t, 'e, 'env> as n ->
         n.RebuildScope(fun inner -> deferScope cleanup inner)
       | _ ->
         Eff.Node(EffNodes.DeferScope<'t, 't, 'e, 'env>(eff, Eff.Pure, cleanup))
+#endif
     | _ ->
       Eff.Node(EffNodes.DeferScope<'t, 't, 'e, 'env>(eff, Eff.Pure, cleanup))
 
   let internal closeScope eff =
     match eff with
     | Eff.Node node ->
+#if FABLE_COMPILER
+      if node.IsDeferScopeNodeFable then
+        Eff.Suspend(fun () -> eff)
+      else
+        eff
+#else
       match box node with
       | :? EffNodes.IDeferScopeNode -> Eff.Suspend(fun () -> eff)
       | _ -> eff
+#endif
     | _ -> eff
 
   let ensure cleanup body =
@@ -138,8 +167,9 @@ module Eff =
         Eff.Err e
     )
 
-  let tryTask (f: unit -> Task<'t>) : Eff<'t, exn, 'env> =
-    ofTask (fun () -> task {
+#if FABLE_COMPILER
+  let tryPromise (f: unit -> Await<'t>) : Eff<'t, exn, 'env> =
+    ofPromise (fun () -> await {
       try
         let! x = f ()
         return Ok x
@@ -147,6 +177,17 @@ module Eff =
         return Error e
     })
     |> bind ofResult
+#else
+  let tryTask (f: unit -> Await<'t>) : Eff<'t, exn, 'env> =
+    ofTask (fun () -> await {
+      try
+        let! x = f ()
+        return Ok x
+      with e ->
+        return Error e
+    })
+    |> bind ofResult
+#endif
 
   let tryAsync (f: unit -> Async<'t>) : Eff<'t, exn, 'env> =
     ofAsync (fun () -> async {
@@ -236,7 +277,7 @@ module Eff =
     : Eff<TimeoutResult<'t>, 'e, 'env> =
     Eff.Node(EffNodes.Timeout(duration, eff))
 
-  let runTask (env: 'env) (eff: Eff<'t, 'e, 'env>) : Task<Exit<'t, 'e>> =
+  let run (env: 'env) (eff: Eff<'t, 'e, 'env>) : Await<Exit<'t, 'e>> =
     let rootFiber =
       EffRuntime.FiberHandle(
         None,
@@ -251,7 +292,7 @@ module Eff =
       EffRuntime.TypedMachine<'env>(stepper, stepper.Step eff [])
       :> EffRuntime.Machine
 
-    task {
+    await {
       let! exit = EffRuntime.runFiberTask rootFiber machine
 
       match exit with
@@ -261,8 +302,10 @@ module Eff =
       | EffRuntime.BoxedExn ex -> return Exit.Exn ex
     }
 
+#if !FABLE_COMPILER
   let runSync (env: 'env) (eff: Eff<'t, 'e, 'env>) : Exit<'t, 'e> =
-    runTask env eff |> _.GetAwaiter().GetResult()
+    run env eff |> _.GetAwaiter().GetResult()
+#endif
 
 module Fiber =
   let await (fiber: Fiber<'t, 'e>) : Eff<Exit<'t, 'e>, unit, 'env> =

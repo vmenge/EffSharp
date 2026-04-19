@@ -23,7 +23,6 @@
     <Compile Include="PackagedConsumerE2E.fs" />
     <Compile Include="RegressionE2E.fs" />
     <Compile Include="ValidationTests.fs" />
-    <Compile Include="ExampleE2E.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

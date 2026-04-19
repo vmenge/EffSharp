@@ -23,6 +23,7 @@
           packages = [
             pkgs.dotnet-sdk_10
             pkgs.just
+            pkgs.nodejs_24
           ];
         };
       }
