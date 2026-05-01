@@ -23,9 +23,16 @@
   </Folder>
   <Folder Name="/pkgs/Std/" />
   <Folder Name="/pkgs/Std/src/">
-    <Project Path="pkgs/Std/src/EffSharp.Std.fsproj" />
+    <Project Path="pkgs/Std/src/Std.fsproj" />
   </Folder>
   <Folder Name="/pkgs/Std/tests/">
-    <Project Path="pkgs/Std/tests/EffSharp.Std.Tests.fsproj" />
+    <Project Path="pkgs/Std/tests/Std.Tests.fsproj" />
+  </Folder>
+  <Folder Name="/pkgs/System/" />
+  <Folder Name="/pkgs/System/src/">
+    <Project Path="pkgs/System/src/System.fsproj" />
+  </Folder>
+  <Folder Name="/pkgs/System/tests/">
+    <Project Path="pkgs/System/tests/System.Tests.fsproj" />
   </Folder>
 </Solution>

@@ -1,4 +1,4 @@
-namespace EffSharp.Std
+namespace EffSharp.System
 
 open EffSharp.Gen
 open System.Collections

@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>EffSharp.Core</AssemblyName>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>EffSharp.Core</PackageId>
     <Version>0.0.2</Version>

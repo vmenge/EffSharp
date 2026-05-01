@@ -49,6 +49,7 @@ let main argv =
     required "--compile-items-file",
     required "--parse-args-file",
     required "--ordered-compile-items-file",
+    required "--generated-files-file",
     required "--other-flags-file"
   with
   | Ok projectDirectory,
@@ -56,6 +57,7 @@ let main argv =
     Ok compileItemsFile,
     Ok parseArgsFile,
     Ok orderedCompileItemsFile,
+    Ok generatedFilesFile,
     Ok otherFlagsFile ->
       try
         let compileInputs =
@@ -77,6 +79,9 @@ let main argv =
 
         if result.Diagnostics.IsEmpty then
           writeLines orderedCompileItemsFile result.OrderedCompileItems
+          writeLines
+            generatedFilesFile
+            (result.GeneratedFiles |> Array.map _.OutputPath)
           0
         else
           for diagnostic in result.Diagnostics do
@@ -88,4 +93,4 @@ let main argv =
         1
   | _ ->
       fail
-        "usage: Gen.Tool --project-directory <path> --intermediate-output-path <path> --compile-items-file <path> --parse-args-file <path> --ordered-compile-items-file <path> --other-flags-file <path>"
+        "usage: Gen.Tool --project-directory <path> --intermediate-output-path <path> --compile-items-file <path> --parse-args-file <path> --ordered-compile-items-file <path> --generated-files-file <path> --other-flags-file <path>"

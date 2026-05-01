@@ -1,6 +1,7 @@
 namespace EffSharp.Gen
 
 open System
+open System.IO
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 
@@ -19,6 +20,10 @@ type GenerateEffectFilesTask() =
   member val ParseCommandLineArgs : ITaskItem array = [||] with get, set
 
   member val OtherFlags = "" with get, set
+
+  member val OrderedCompileItemsFile = "" with get, set
+
+  member val GeneratedFilesFile = "" with get, set
 
   [<Output>]
   member val GeneratedFiles : ITaskItem array = [||] with get, set
@@ -39,6 +44,15 @@ type GenerateEffectFilesTask() =
       diagnostic.Message,
       [||]
     )
+
+  member private _.writeLines path lines =
+    if not (String.IsNullOrWhiteSpace(path)) then
+      let directory = Path.GetDirectoryName(path)
+
+      if not (String.IsNullOrWhiteSpace(directory)) then
+        Directory.CreateDirectory(directory) |> ignore
+
+      File.WriteAllLines(path, lines)
 
   override this.Execute() =
     try
@@ -63,6 +77,12 @@ type GenerateEffectFilesTask() =
         this.OrderedCompileItems <-
           result.OrderedCompileItems
           |> Array.map (fun filePath -> TaskItem(filePath) :> ITaskItem)
+
+        this.writeLines this.OrderedCompileItemsFile result.OrderedCompileItems
+
+        this.writeLines
+          this.GeneratedFilesFile
+          (result.GeneratedFiles |> Array.map _.OutputPath)
 
         true
       else

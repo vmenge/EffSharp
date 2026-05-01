@@ -1,8 +1,9 @@
-namespace EffSharp.Std.Tests
+namespace EffSharp.System.Tests
 
 open Expecto
 open EffSharp.Core
 open EffSharp.Std
+open EffSharp.System
 
 module Cmd =
   let private parse =

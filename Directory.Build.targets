@@ -4,25 +4,22 @@
     <_GenToolProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)pkgs/Gen/tool/Gen.Tool.fsproj'))</_GenToolProjectPath>
     <_GenTestsProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)pkgs/Gen/tests/Gen.Tests.fsproj'))</_GenTestsProjectPath>
     <_GenToolDllPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)pkgs/Gen/tool/bin/$(Configuration)/net10.0/Gen.Tool.dll'))</_GenToolDllPath>
+    <_GenGeneratedDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)Gen'))</_GenGeneratedDirectory>
+    <_GenCompileItemsFile>$(_GenGeneratedDirectory)\compile-items.txt</_GenCompileItemsFile>
+    <_GenParseArgsFile>$(_GenGeneratedDirectory)\parse-args.txt</_GenParseArgsFile>
+    <_GenOtherFlagsFile>$(_GenGeneratedDirectory)\other-flags.txt</_GenOtherFlagsFile>
+    <_GenOrderedCompileItemsFile>$(_GenGeneratedDirectory)\ordered-compile-items.txt</_GenOrderedCompileItemsFile>
+    <_GenGeneratedFilesFile>$(_GenGeneratedDirectory)\generated-files.txt</_GenGeneratedFilesFile>
   </PropertyGroup>
 
   <Target
-    Name="GenGenerateSourcesFromProjectReference"
-    BeforeTargets="FSharpSourceCodeCompileOrder"
+    Name="GenPrepareSourcesFromProjectReference"
     Condition="'$(Language)' == 'F#' and '$(GenSourceMode)' != 'false' and '$(MSBuildProjectFullPath)' != '$(_GenSourceProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_GenToolProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_GenTestsProjectPath)'">
     <ItemGroup>
       <_GenSourceProjectReference
         Include="@(ProjectReference)"
         Condition="'%(FullPath)' != '' and '%(FullPath)' == '$(_GenSourceProjectPath)'" />
     </ItemGroup>
-
-    <PropertyGroup Condition="'@(_GenSourceProjectReference)' != ''">
-      <_GenGeneratedDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)Gen'))</_GenGeneratedDirectory>
-      <_GenCompileItemsFile>$(_GenGeneratedDirectory)\compile-items.txt</_GenCompileItemsFile>
-      <_GenParseArgsFile>$(_GenGeneratedDirectory)\parse-args.txt</_GenParseArgsFile>
-      <_GenOtherFlagsFile>$(_GenGeneratedDirectory)\other-flags.txt</_GenOtherFlagsFile>
-      <_GenOrderedCompileItemsFile>$(_GenGeneratedDirectory)\ordered-compile-items.txt</_GenOrderedCompileItemsFile>
-    </PropertyGroup>
 
     <ItemGroup Condition="'@(_GenSourceProjectReference)' != ''">
       <_GenDefine Include="$(DefineConstants)" Condition="'$(DefineConstants)' != ''" />
@@ -33,12 +30,6 @@
       <_GenParseCommandLineArg Include="@(ReferencePath->'--reference:%(FullPath)')" Condition="'@(ReferencePath)' != ''" />
     </ItemGroup>
 
-    <MSBuild
-      Projects="$(_GenToolProjectPath)"
-      Targets="Build"
-      Properties="Configuration=$(Configuration)"
-      Condition="'@(_GenSourceProjectReference)' != ''" />
-
     <MakeDir
       Directories="$(_GenGeneratedDirectory)"
       Condition="'@(_GenSourceProjectReference)' != ''" />
@@ -47,32 +38,65 @@
       File="$(_GenCompileItemsFile)"
       Lines="@(Compile->'%(FullPath)')"
       Overwrite="true"
+      WriteOnlyWhenDifferent="true"
       Condition="'@(_GenSourceProjectReference)' != ''" />
 
     <WriteLinesToFile
       File="$(_GenParseArgsFile)"
       Lines="@(_GenParseCommandLineArg)"
       Overwrite="true"
+      WriteOnlyWhenDifferent="true"
       Condition="'@(_GenSourceProjectReference)' != ''" />
 
     <WriteLinesToFile
       File="$(_GenOtherFlagsFile)"
       Lines="$(OtherFlags)"
       Overwrite="true"
-      Condition="'@(_GenSourceProjectReference)' != ''" />
-
-    <Exec
-      Command="dotnet &quot;$(_GenToolDllPath)&quot; --project-directory &quot;$(MSBuildProjectDirectory)&quot; --intermediate-output-path &quot;$(IntermediateOutputPath)&quot; --compile-items-file &quot;$(_GenCompileItemsFile)&quot; --parse-args-file &quot;$(_GenParseArgsFile)&quot; --ordered-compile-items-file &quot;$(_GenOrderedCompileItemsFile)&quot; --other-flags-file &quot;$(_GenOtherFlagsFile)&quot;"
-      ConsoleToMsBuild="true"
+      WriteOnlyWhenDifferent="true"
       Condition="'@(_GenSourceProjectReference)' != ''" />
 
     <ReadLinesFromFile
+      File="$(_GenGeneratedFilesFile)"
+      Condition="'@(_GenSourceProjectReference)' != '' and Exists('$(_GenGeneratedFilesFile)')">
+      <Output TaskParameter="Lines" ItemName="_GenPreviousGeneratedFile" />
+    </ReadLinesFromFile>
+  </Target>
+
+  <Target
+    Name="GenBuildToolFromProjectReference"
+    DependsOnTargets="GenPrepareSourcesFromProjectReference"
+    Condition="'$(Language)' == 'F#' and '$(GenSourceMode)' != 'false' and '$(MSBuildProjectFullPath)' != '$(_GenSourceProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_GenToolProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_GenTestsProjectPath)'">
+    <MSBuild
+      Projects="$(_GenToolProjectPath)"
+      Targets="Build"
+      Properties="Configuration=$(Configuration)"
+      Condition="'@(_GenSourceProjectReference)' != ''" />
+  </Target>
+
+  <Target
+    Name="GenGenerateSourcesFromProjectReference"
+    DependsOnTargets="GenBuildToolFromProjectReference"
+    Inputs="@(Compile);@(ReferencePath);$(_GenCompileItemsFile);$(_GenParseArgsFile);$(_GenOtherFlagsFile);$(_GenToolDllPath)"
+    Outputs="$(_GenOrderedCompileItemsFile);$(_GenGeneratedFilesFile)"
+    Condition="'$(Language)' == 'F#' and '$(GenSourceMode)' != 'false' and '$(MSBuildProjectFullPath)' != '$(_GenSourceProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_GenToolProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_GenTestsProjectPath)'">
+    <Exec
+      Command="dotnet &quot;$(_GenToolDllPath)&quot; --project-directory &quot;$(MSBuildProjectDirectory)&quot; --intermediate-output-path &quot;$(IntermediateOutputPath)&quot; --compile-items-file &quot;$(_GenCompileItemsFile)&quot; --parse-args-file &quot;$(_GenParseArgsFile)&quot; --ordered-compile-items-file &quot;$(_GenOrderedCompileItemsFile)&quot; --generated-files-file &quot;$(_GenGeneratedFilesFile)&quot; --other-flags-file &quot;$(_GenOtherFlagsFile)&quot;"
+      ConsoleToMsBuild="true"
+      Condition="'@(_GenSourceProjectReference)' != ''" />
+  </Target>
+
+  <Target
+    Name="GenApplyGeneratedCompileOrderFromProjectReference"
+    BeforeTargets="FSharpSourceCodeCompileOrder"
+    DependsOnTargets="GenGenerateSourcesFromProjectReference"
+    Condition="'$(Language)' == 'F#' and '$(GenSourceMode)' != 'false' and '$(MSBuildProjectFullPath)' != '$(_GenSourceProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_GenToolProjectPath)' and '$(MSBuildProjectFullPath)' != '$(_GenTestsProjectPath)'">
+    <ReadLinesFromFile
       File="$(_GenOrderedCompileItemsFile)"
-      Condition="'@(_GenSourceProjectReference)' != ''">
+      Condition="'@(_GenSourceProjectReference)' != '' and Exists('$(_GenOrderedCompileItemsFile)')">
       <Output TaskParameter="Lines" ItemName="_GenOrderedCompile" />
     </ReadLinesFromFile>
 
-    <ItemGroup Condition="'@(_GenSourceProjectReference)' != ''">
+    <ItemGroup Condition="'@(_GenOrderedCompile)' != ''">
       <Compile Remove="@(Compile)" />
       <Compile Include="@(_GenOrderedCompile)" />
     </ItemGroup>

@@ -19,14 +19,12 @@ type GenerationResult = {
 }
 
 module Generation =
-  let clearGeneratedFiles (outputDirectory: string) =
+  let private writeAllTextIfChanged path contents =
+    if not (File.Exists(path)) || File.ReadAllText(path) <> contents then
+      File.WriteAllText(path, contents)
+
+  let syncGeneratedFiles (effectInterfaces: EffectInterface list) (outputDirectory: string) =
     Directory.CreateDirectory(outputDirectory) |> ignore
-
-    for staleFile in Directory.GetFiles(outputDirectory, "*.g.fs") do
-      File.Delete(staleFile)
-
-  let generateFiles (effectInterfaces: EffectInterface list) (outputDirectory: string) =
-    clearGeneratedFiles outputDirectory
 
     let generatedFiles =
       effectInterfaces
@@ -40,8 +38,17 @@ module Generation =
         })
       |> List.toArray
 
+    let expectedFiles =
+      generatedFiles
+      |> Array.map _.OutputPath
+      |> Set.ofArray
+
+    for staleFile in Directory.GetFiles(outputDirectory, "*.g.fs") do
+      if not (Set.contains staleFile expectedFiles) then
+        File.Delete(staleFile)
+
     for generatedFile in generatedFiles do
-      File.WriteAllText(generatedFile.OutputPath, generatedFile.Contents)
+      writeAllTextIfChanged generatedFile.OutputPath generatedFile.Contents
 
     generatedFiles
 
@@ -116,7 +123,7 @@ module Generation =
     let validation = Validation.validateFiles parsedFiles
 
     if validation.Diagnostics.IsEmpty then
-      let generatedFiles = generateFiles validation.Interfaces outputDirectory
+      let generatedFiles = syncGeneratedFiles validation.Interfaces outputDirectory
 
       {
         Diagnostics = []
@@ -124,7 +131,7 @@ module Generation =
         OrderedCompileItems = orderedCompileItems request.CompileInputs generatedFiles
       }
     else
-      clearGeneratedFiles outputDirectory
+      syncGeneratedFiles [] outputDirectory |> ignore
 
       {
         Diagnostics = validation.Diagnostics

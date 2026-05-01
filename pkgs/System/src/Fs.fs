@@ -1,4 +1,4 @@
-﻿namespace EffSharp.Std
+﻿namespace EffSharp.System
 
 open EffSharp.Core
 open EffSharp.Gen

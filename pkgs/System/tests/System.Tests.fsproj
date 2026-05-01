@@ -3,18 +3,20 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>EffSharp.System.Tests</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="Stdio.fs" />
-    <Compile Include="String.fs" />
     <Compile Include="Path.fs" />
     <Compile Include="Cmd.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\EffSharp.Std.fsproj" />
+    <ProjectReference Include="..\..\Core\src\Core.fsproj" />
+    <ProjectReference Include="..\..\Std\src\Std.fsproj" />
+    <ProjectReference Include="..\src\System.fsproj" />
   </ItemGroup>
 
   <ItemGroup>

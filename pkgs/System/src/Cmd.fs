@@ -1,4 +1,4 @@
-namespace EffSharp.Std
+namespace EffSharp.System
 
 open System
 open System.Text

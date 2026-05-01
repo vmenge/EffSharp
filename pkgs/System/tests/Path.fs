@@ -1,7 +1,7 @@
-namespace EffSharp.Std.Tests
+namespace EffSharp.System.Tests
 
 open Expecto
-open EffSharp.Std
+open EffSharp.System
 
 module Path =
   let private normalize path = Path path |> Path.normalizeLexically

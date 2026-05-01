@@ -2,6 +2,12 @@
   <PropertyGroup>
     <GenTaskAssemblyPath Condition="'$(GenTaskAssemblyPath)' == '' and Exists('$(MSBuildThisFileDirectory)..\src\bin\$(Configuration)\$(TargetFramework)\Gen.dll')">$(MSBuildThisFileDirectory)..\src\bin\$(Configuration)\$(TargetFramework)\Gen.dll</GenTaskAssemblyPath>
     <GenTaskAssemblyPath Condition="'$(GenTaskAssemblyPath)' == ''">$(MSBuildThisFileDirectory)$(TargetFramework)\Gen.dll</GenTaskAssemblyPath>
+    <_GenGeneratedDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)Gen'))</_GenGeneratedDirectory>
+    <_GenCompileItemsFile>$(_GenGeneratedDirectory)\compile-items.txt</_GenCompileItemsFile>
+    <_GenParseArgsFile>$(_GenGeneratedDirectory)\parse-args.txt</_GenParseArgsFile>
+    <_GenOtherFlagsFile>$(_GenGeneratedDirectory)\other-flags.txt</_GenOtherFlagsFile>
+    <_GenOrderedCompileItemsFile>$(_GenGeneratedDirectory)\ordered-compile-items.txt</_GenOrderedCompileItemsFile>
+    <_GenGeneratedFilesFile>$(_GenGeneratedDirectory)\generated-files.txt</_GenGeneratedFilesFile>
   </PropertyGroup>
 
   <UsingTask
@@ -20,8 +26,7 @@
     Condition="'$(GenEnabled)' == 'true' and Exists('$(GenTaskAssemblyPath)') and '$(MSBuildRuntimeType)' == 'Core'" />
 
   <Target
-    Name="GenGenerateSources"
-    BeforeTargets="FSharpSourceCodeCompileOrder"
+    Name="GenPrepareSources"
     Condition="'$(GenEnabled)' == 'true' and '$(Language)' == 'F#' and Exists('$(GenTaskAssemblyPath)')">
     <ItemGroup>
       <_GenDefine Include="$(DefineConstants)" Condition="'$(DefineConstants)' != ''" />
@@ -32,17 +37,63 @@
       <_GenParseCommandLineArg Include="@(ReferencePath->'--reference:%(FullPath)')" Condition="'@(ReferencePath)' != ''" />
     </ItemGroup>
 
+    <MakeDir Directories="$(_GenGeneratedDirectory)" />
+
+    <WriteLinesToFile
+      File="$(_GenCompileItemsFile)"
+      Lines="@(Compile->'%(FullPath)')"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true" />
+
+    <WriteLinesToFile
+      File="$(_GenParseArgsFile)"
+      Lines="@(_GenParseCommandLineArg)"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true" />
+
+    <WriteLinesToFile
+      File="$(_GenOtherFlagsFile)"
+      Lines="$(OtherFlags)"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true" />
+
+    <ReadLinesFromFile
+      File="$(_GenGeneratedFilesFile)"
+      Condition="Exists('$(_GenGeneratedFilesFile)')">
+      <Output TaskParameter="Lines" ItemName="_GenPreviousGeneratedFile" />
+    </ReadLinesFromFile>
+  </Target>
+
+  <Target
+    Name="GenGenerateSources"
+    DependsOnTargets="GenPrepareSources"
+    Inputs="@(Compile);@(ReferencePath);$(_GenCompileItemsFile);$(_GenParseArgsFile);$(_GenOtherFlagsFile);$(GenTaskAssemblyPath)"
+    Outputs="$(_GenOrderedCompileItemsFile);$(_GenGeneratedFilesFile)"
+    Condition="'$(GenEnabled)' == 'true' and '$(Language)' == 'F#' and Exists('$(GenTaskAssemblyPath)')">
     <GenerateEffectFilesTask
       ProjectDirectory="$(MSBuildProjectDirectory)"
       IntermediateOutputPath="$(IntermediateOutputPath)"
       CompileItems="@(Compile)"
       ParseCommandLineArgs="@(_GenParseCommandLineArg)"
-      OtherFlags="$(OtherFlags)">
+      OtherFlags="$(OtherFlags)"
+      OrderedCompileItemsFile="$(_GenOrderedCompileItemsFile)"
+      GeneratedFilesFile="$(_GenGeneratedFilesFile)">
       <Output TaskParameter="GeneratedFiles" ItemName="FileWrites" />
-      <Output TaskParameter="OrderedCompileItems" ItemName="_GenOrderedCompile" />
     </GenerateEffectFilesTask>
+  </Target>
 
-    <ItemGroup>
+  <Target
+    Name="GenApplyGeneratedCompileOrder"
+    BeforeTargets="FSharpSourceCodeCompileOrder"
+    DependsOnTargets="GenGenerateSources"
+    Condition="'$(GenEnabled)' == 'true' and '$(Language)' == 'F#' and Exists('$(GenTaskAssemblyPath)')">
+    <ReadLinesFromFile
+      File="$(_GenOrderedCompileItemsFile)"
+      Condition="Exists('$(_GenOrderedCompileItemsFile)')">
+      <Output TaskParameter="Lines" ItemName="_GenOrderedCompile" />
+    </ReadLinesFromFile>
+
+    <ItemGroup Condition="'@(_GenOrderedCompile)' != ''">
       <Compile Remove="@(Compile)" />
       <Compile Include="@(_GenOrderedCompile)" />
     </ItemGroup>

@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>EffSharp.Web</AssemblyName>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>EffSharp.Web</PackageId>
+    <Version>0.0.2</Version>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/vmenge/EffSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vmenge/EffSharp</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup></ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Std\src\Std.fsproj" />
+  </ItemGroup>
+
+</Project>

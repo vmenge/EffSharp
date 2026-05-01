@@ -10,7 +10,7 @@ module ValidationTests =
     Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", ".."))
 
   let private coreDll =
-    Path.Combine(repoRoot, "pkgs", "Core", "src", "bin", "Debug", "net10.0", "Core.dll")
+    Path.Combine(repoRoot, "pkgs", "Core", "src", "bin", "Debug", "net10.0", "EffSharp.Core.dll")
 
   let private genDll =
     Path.Combine(repoRoot, "pkgs", "Gen", "src", "bin", "Debug", "net10.0", "Gen.dll")

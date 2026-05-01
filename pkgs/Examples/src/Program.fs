@@ -6,22 +6,24 @@ open System
 open type EffSharp.Std.Stdio
 open System.Text
 
-let program () = effr {
-  let! out = "ls" |. "grep -i .fs" |> Cmd.output
-  do! String.fromUtf8 out.Stdout |> Eff.bind println
-  do! Stdio.println "hello, world!"
-
-  let! test = "echo test" |> Cmd.output
-  do! String.fromUtf8 test.Stdout |> Eff.bind println
-
-  let! num = Random.float ()
-
-  return ()
+let whatever () = effr {
+  let! random = Random.intRange 10 20
+  return random + 50
 }
 
+let program (z: int) = effr {
+  let! a = whatever ()
+  let x = 5
+  let y = 10
+  let sum = x + y + z
+  let! date = Clock.utcNow ()
+  do! Stdio.println $"sum is {x + y}"
+
+  return x + y
+}
 
 [<EntryPoint>]
 let main _ =
-  program () |> Eff.runSync (Std.Provider()) |> printfn "%O"
+  program 10 |> Eff.runSync (Std.Provider()) |> printfn "%O"
 
   0

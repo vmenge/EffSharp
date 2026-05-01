@@ -1,7 +1,8 @@
-namespace EffSharp.Std
+namespace EffSharp.System
 
 open System
 open System.IO
+open EffSharp.Std
 
 /// Represents a filesystem path as a lexical value.
 ///

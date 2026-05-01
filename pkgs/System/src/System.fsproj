@@ -2,9 +2,10 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>EffSharp.System</AssemblyName>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <PackageId>EffSharp.Std</PackageId>
+    <PackageId>EffSharp.System</PackageId>
     <Version>0.0.2</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/vmenge/EffSharp</PackageProjectUrl>
@@ -13,28 +14,18 @@
 
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Utils.fs" />
-    <Compile Include="ValueOption.fs" />
-    <Compile Include="Option.fs" />
-    <Compile Include="Result.fs" />
-    <Compile Include="Task.fs" />
-    <Compile Include="Vec.fs" />
-    <Compile Include="String.fs" />
     <Compile Include="Path.fs" />
-    <Compile Include="Fs.fs" />
-    <Compile Include="Stdio.fs" />
-    <Compile Include="Clock.fs" />
-    <Compile Include="Env.fs" />
-    <Compile Include="Random.fs" />
     <Compile Include="Net.fs" />
     <Compile Include="Command.fs" />
     <Compile Include="Cmd.fs" />
-    <Compile Include="Std.fs" />
+    <Compile Include="Env.fs" />
+    <Compile Include="Fs.fs" />
+    <Compile Include="Stdio.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Core\src\Core.fsproj" />
-    <ProjectReference Include="..\..\Gen\src\Gen.fsproj" />
+    <ProjectReference Include="..\..\Gen\src\Gen.fsproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\Std\src\Std.fsproj" />
   </ItemGroup>
 
 </Project>

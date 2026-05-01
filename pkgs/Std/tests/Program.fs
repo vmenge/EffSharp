@@ -4,8 +4,4 @@ open Expecto
 
 module Program =
   [<EntryPoint>]
-  let main argv =
-    runTestsWithCLIArgs
-      []
-      argv
-      (testList "all" [ Stdio.tests; Path.tests; String.tests; Cmd.tests ])
+  let main argv = runTestsWithCLIArgs [] argv (testList "all" [ String.tests ])

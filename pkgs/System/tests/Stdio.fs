@@ -1,4 +1,4 @@
-namespace EffSharp.Std.Tests
+namespace EffSharp.System.Tests
 
 open System
 open System.IO
@@ -8,6 +8,7 @@ open System.Threading.Tasks
 open Expecto
 open EffSharp.Core
 open EffSharp.Std
+open EffSharp.System
 
 module Stdio =
   type private ProbeStream(initial: byte array) =
@@ -83,8 +84,8 @@ module Stdio =
   let private decodeUtf8 (bytes: byte array) = Encoding.UTF8.GetString(bytes)
 
   let private create stdin stdout stderr =
-    StdioProvider(stdin, stdout, stderr, Encoding.UTF8, Encoding.UTF8, "\n")
-    :> EffSharp.Std.Stdio
+    EffSharp.System.StdioProvider(stdin, stdout, stderr, Encoding.UTF8, Encoding.UTF8, "\n")
+    :> EffSharp.System.Stdio
 
   let private run eff = task {
     let! exit = Eff.run () eff
@@ -96,8 +97,8 @@ module Stdio =
       testCase
         "Provider returns a singleton"
         (fun () ->
-          let a = EffSharp.Std.Stdio.Provider()
-          let b = EffSharp.Std.Stdio.Provider()
+          let a = Stdio.Provider()
+          let b = Stdio.Provider()
 
           Expect.isTrue
             (obj.ReferenceEquals(a, b))

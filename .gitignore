@@ -18,6 +18,7 @@ tests/milestone/out/
 .tmp-runtime/
 target/
 node_modules/
+fable_modules/
 .fable-build/
 coverage/
 
