@@ -1,5 +1,12 @@
 <Solution>
   <Folder Name="/pkgs/" />
+  <Folder Name="/pkgs/AspNetCore/" />
+  <Folder Name="/pkgs/AspNetCore/src/">
+    <Project Path="pkgs/AspNetCore/src/AspNetCore.fsproj" />
+  </Folder>
+  <Folder Name="/pkgs/AspNetCore/tests/">
+    <Project Path="pkgs/AspNetCore/tests/AspNetCore.Tests.fsproj" />
+  </Folder>
   <Folder Name="/pkgs/Core/" />
   <Folder Name="/pkgs/Core/src/">
     <Project Path="pkgs/Core/src/Core.fsproj" />

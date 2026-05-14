@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>EffSharp.AspNetCore</AssemblyName>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>EffSharp.AspNetCore</PackageId>
+    <Version>0.0.2</Version>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/vmenge/EffSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vmenge/EffSharp</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Response.fs" />
+    <Compile Include="Req.fs" />
+    <Compile Include="Router.fs" />
+    <Compile Include="AspNetCore.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\Core\src\Core.fsproj" />
+  </ItemGroup>
+
+</Project>
